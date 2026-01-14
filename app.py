@@ -1,41 +1,203 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template_string
 import csv
 import os
+from unicodedata import normalize
 
 app = Flask(__name__)
 
+# --- CONFIGURAÇÃO DO HTML (INTERFACE VISUAL) ---
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rede Autorizada Soul</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background-color: #f4f6f8; color: #333; }
+        h1 { text-align: center; color: #111; margin-bottom: 5px; }
+        .subtitle { text-align: center; color: #666; margin-bottom: 30px; }
+        
+        /* Barra de Busca */
+        .search-container { display: flex; gap: 10px; justify-content: center; margin-bottom: 30px; }
+        input { padding: 12px 15px; width: 60%; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; outline: none; }
+        input:focus { border-color: #000; }
+        button { padding: 12px 25px; cursor: pointer; background: #000; color: #fff; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; transition: background 0.2s; }
+        button:hover { background: #444; }
+
+        /* Grid de Cards */
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; }
+        
+        /* Card da Loja */
+        .card { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); border-left: 5px solid #000; transition: transform 0.2s; }
+        .card:hover { transform: translateY(-3px); }
+        
+        .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+        .card h3 { margin: 0; font-size: 1.2rem; color: #000; }
+        .badge { background: #eee; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; color: #555; text-transform: uppercase; }
+        
+        .info-group { margin-bottom: 12px; font-size: 0.95rem; line-height: 1.5; }
+        .info-group strong { display: block; font-size: 0.8rem; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+        .highlight { color: #000; font-weight: 500; }
+        
+        .contact-links { margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap; }
+        .btn-link { text-decoration: none; background: #f0f0f0; color: #333; padding: 6px 12px; border-radius: 4px; font-size: 0.85rem; font-weight: 600; }
+        .btn-link.whatsapp { background: #25D366; color: #fff; }
+        .btn-link.insta { background: #E1306C; color: #fff; }
+
+        .error { text-align: center; padding: 20px; background: #fff; border-radius: 8px; color: #d9534f; }
+        .loading { text-align: center; color: #666; font-style: italic; }
+    </style>
+</head>
+<body>
+
+    <h1>Encontre uma Loja Soul</h1>
+    <p class="subtitle">{{ qtd }} autorizadas cadastradas</p>
+    
+    <div class="search-container">
+        <input type="text" id="cidadeInput" placeholder="Digite sua Cidade ou Estado (ex: Itajaí, SP)...">
+        <button onclick="buscar()">Buscar</button>
+    </div>
+    
+    <div id="resultado" class="grid">
+        </div>
+
+    <script>
+        // Ativa a busca ao apertar Enter
+        document.getElementById("cidadeInput").addEventListener("keypress", function(event) {
+            if (event.key === "Enter") { buscar(); }
+        });
+
+        async function buscar() {
+            let termo = document.getElementById('cidadeInput').value;
+            let btn = document.querySelector('button');
+            let divRes = document.getElementById('resultado');
+            
+            if (!termo) { alert("Digite algo para buscar!"); return; }
+
+            btn.innerText = 'Buscando...';
+            btn.disabled = true;
+            divRes.innerHTML = '<p class="loading" style="grid-column: 1/-1;">Carregando dados...</p>';
+            
+            try {
+                let response = await fetch('/lojas?busca=' + termo);
+                let dados = await response.json();
+                
+                let html = '';
+                if(dados.length === 0) {
+                    divRes.classList.remove('grid');
+                    html = '<div class="error" style="grid-column: 1/-1;">Nenhuma loja encontrada para "'+termo+'".<br>Tente digitar apenas o nome da cidade ou a sigla do estado (ex: SC).</div>';
+                } else {
+                    divRes.classList.add('grid');
+                    dados.forEach(item => {
+                        // MAPEAMENTO DOS SEUS DADOS EXATOS
+                        // O Python transformou tudo para minúsculo e trocou espaços por _
+                        // Ex: "SEG. A SEX." virou "seg._a_sex."
+                        
+                        let nome = item.nome || 'Loja Autorizada';
+                        let perfil = item.perfil || 'Autorizada';
+                        let cidade = item.municipio || '';
+                        let uf = item.uf || '';
+                        let endereco = item.endereço || '';
+                        let num = item['numero/complemento'] || '';
+                        let bairro = item.bairro || '';
+                        let cep = item.cep || '';
+                        let tel = item.telefone || '';
+                        let contato = item.contato || '';
+                        let email = item['e-mail'] || '';
+                        let insta = item.instagram || '';
+                        let horario_sem = item['seg._a_sex.'] || '';
+                        let horario_sab = item['sábado'] || '';
+
+                        // Monta o Card HTML
+                        html += `
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>${nome}</h3>
+                                <span class="badge">${perfil}</span>
+                            </div>
+                            
+                            <div class="info-group">
+                                <strong>Localização</strong>
+                                <span class="highlight">${cidade} - ${uf}</span><br>
+                                ${endereco}, ${num}<br>
+                                ${bairro} - CEP: ${cep}
+                            </div>
+                            
+                            <div class="info-group">
+                                <strong>Contato</strong>
+                                ${contato ? `Falar com: ${contato}<br>` : ''}
+                                ${tel} <br>
+                                <span style="font-size: 0.85em; color: #666;">${email}</span>
+                            </div>
+
+                            ${ (horario_sem || horario_sab) ? `
+                            <div class="info-group">
+                                <strong>Horário</strong>
+                                ${horario_sem ? `Seg-Sex: ${horario_sem}<br>` : ''}
+                                ${horario_sab ? `Sáb: ${horario_sab}` : ''}
+                            </div>` : ''}
+
+                            <div class="contact-links">
+                                ${tel ? `<a href="tel:${tel.replace(/[^0-9]/g, '')}" class="btn-link">📞 Ligar</a>` : ''}
+                                ${tel ? `<a href="https://wa.me/55${tel.replace(/[^0-9]/g, '')}" target="_blank" class="btn-link whatsapp">WhatsApp</a>` : ''}
+                                ${insta ? `<a href="https://instagram.com/${insta.replace('@','').replace('/','')}" target="_blank" class="btn-link insta">Instagram</a>` : ''}
+                            </div>
+                        </div>`;
+                    });
+                }
+                divRes.innerHTML = html;
+            } catch (error) {
+                console.error(error);
+                divRes.innerHTML = '<p class="error" style="grid-column: 1/-1;">Ocorreu um erro ao buscar. Tente novamente.</p>';
+            } finally {
+                btn.innerText = 'Buscar';
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
+"""
+
+# --- BACKEND (SERVIDOR PYTHON) ---
+
+def remover_acentos(txt):
+    if not txt: return ""
+    return normalize('NFKD', str(txt)).encode('ASCII', 'ignore').decode('ASCII').lower()
+
 def carregar_dados():
     lojas = []
-    caminho_arquivo = 'dados.csv'
+    caminho = 'dados.csv'
     
-    if not os.path.exists(caminho_arquivo):
-        print("ALERTA: Arquivo dados.csv não encontrado.")
+    if not os.path.exists(caminho):
         return []
 
     try:
-        # Tenta ler com encoding UTF-8 (padrão) ou Latin-1 (comum no Excel Brasil)
+        # Tenta ler UTF-8, se falhar tenta Latin-1
         try:
-            arquivo = open(caminho_arquivo, mode='r', encoding='utf-8-sig')
+            arquivo = open(caminho, mode='r', encoding='utf-8-sig')
         except:
-            arquivo = open(caminho_arquivo, mode='r', encoding='latin-1')
+            arquivo = open(caminho, mode='r', encoding='latin-1')
 
         with arquivo as f:
-            # O Excel as vezes usa ponto-e-virgula, as vezes virgula. Vamos testar.
-            amostra = f.read(1024)
+            # Descobre separador (; ou ,)
+            conteudo = f.read(2048)
             f.seek(0)
-            delimitador = ';' if ';' in amostra else ','
+            delimitador = ';' if conteudo.count(';') > conteudo.count(',') else ','
             
             reader = csv.DictReader(f, delimiter=delimitador)
             
             for row in reader:
-                # Limpa os dados para evitar erros de chaves (Ex: "Cidade " vira "cidade")
-                loja_limpa = {}
+                # Limpa as chaves para facilitar o uso no JS
+                # Ex: "SEG. A SEX." -> "seg._a_sex."
+                item_limpo = {}
                 for k, v in row.items():
-                    if k: # Só processa se a coluna tiver nome
+                    if k:
                         chave = str(k).strip().lower().replace(' ', '_')
                         valor = str(v).strip() if v else ""
-                        loja_limpa[chave] = valor
-                lojas.append(loja_limpa)
+                        item_limpo[chave] = valor
+                lojas.append(item_limpo)
                 
     except Exception as e:
         print(f"Erro ao ler CSV: {e}")
@@ -45,70 +207,19 @@ def carregar_dados():
 @app.route('/')
 def home():
     dados = carregar_dados()
-    qtd = len(dados)
-    
-    return f"""
-    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h1 style="color: #333;">Encontre uma Loja Soul</h1>
-        <p>Temos <strong>{qtd}</strong> parceiros cadastrados.</p>
-        
-        <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-            <input type="text" id="cidadeInput" placeholder="Digite sua cidade..." style="padding: 10px; width: 100%;">
-            <button onclick="buscar()" style="padding: 10px 20px; cursor: pointer; background: #000; color: #fff; border: none;">Buscar</button>
-        </div>
-        
-        <div id="resultado"></div>
-    </div>
-
-    <script>
-        async function buscar() {
-            let cidade = document.getElementById('cidadeInput').value;
-            let btn = document.querySelector('button');
-            btn.innerText = 'Buscando...';
-            
-            let response = await fetch('/lojas?cidade=' + cidade);
-            let dados = await response.json();
-            
-            let html = '';
-            if(dados.length === 0) html = '<p style="color: red">Nenhuma loja encontrada nesta cidade.</p>';
-            
-            dados.forEach(loja => {
-                // Tenta achar os campos independente do nome exato no Excel
-                let nome = loja.loja || loja.nome_fantasia || loja.nome || 'Loja Autorizada';
-                let end = loja.endereço || loja.endereco || '';
-                let num = loja.número || loja.numero || '';
-                let bairro = loja.bairro || '';
-                let tel = loja.telefone || loja.celular || loja.contato || '';
-                let cidade = loja.cidade || '';
-                let uf = loja.estado || loja.uf || '';
-
-                html += `<div style="border: 1px solid #ddd; padding: 15px; margin-bottom: 10px; border-radius: 8px; background: #f9f9f9;">
-                    <h3 style="margin: 0 0 10px 0;">${nome}</h3>
-                    <p style="margin: 5px 0;">📍 <strong>${cidade} - ${uf}</strong></p>
-                    <p style="margin: 5px 0;">🏠 ${end}, ${num} - ${bairro}</p>
-                    <p style="margin: 5px 0;">📞 <a href="tel:${tel}">${tel}</a></p>
-                </div>`;
-            });
-            
-            document.getElementById('resultado').innerHTML = html;
-            btn.innerText = 'Buscar';
-        }
-    </script>
-    """
+    return render_template_string(HTML_TEMPLATE, qtd=len(dados))
 
 @app.route('/lojas')
 def get_lojas():
-    cidade_busca = request.args.get('cidade', '').strip().lower()
+    termo = request.args.get('busca', '').strip()
     todas = carregar_dados()
     
-    if not cidade_busca:
+    if not termo:
         return jsonify(todas)
     
-    resultado = [
-        loja for loja in todas 
-        if cidade_busca in str(loja.get('cidade', '')).lower()
-    ]
-    return jsonify(resultado)
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+    termo_limpo = remover_acentos(termo)
+    
+    resultado = []
+    for loja in todas:
+        # Verifica se o termo está em MUNICIPIO ou UF
+        mun = remover_acentos(
