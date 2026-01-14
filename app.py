@@ -2,7 +2,6 @@ from flask import Flask, jsonify, request, render_template_string, redirect, url
 import sqlite3
 import csv
 import os
-import json
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
@@ -17,7 +16,7 @@ if not os.path.exists(UPLOAD_FOLDER):
 
 DB_NAME = "lojas.db"
 
-# --- HTML PÚBLICO (CORRIGIDO) ---
+# --- HTML PÚBLICO ---
 HTML_PUBLICO = """
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -29,108 +28,135 @@ HTML_PUBLICO = """
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
         body { font-family: 'Inter', sans-serif; max-width: 1400px; margin: 0 auto; padding: 0; background: #fff; color: #111; }
-        header { padding: 40px 20px; text-align: center; border-bottom: 1px solid #eee; margin-bottom: 0; }
-        h1 { text-transform: uppercase; letter-spacing: 2px; font-weight: 900; font-size: 2.5rem; margin: 0 0 10px 0; }
-        .subtitle { color: #666; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; }
-        #main-map { height: 500px; width: 100%; background: #f4f4f4; margin-bottom: 0; z-index: 1; border-bottom: 1px solid #000; }
+        
+        /* Header Trek Style */
+        header { padding: 40px 20px; text-align: center; border-bottom: 1px solid #eee; }
+        h1 { text-transform: uppercase; letter-spacing: 1px; font-weight: 900; font-size: 2.2rem; margin: 0 0 5px 0; }
+        .subtitle { color: #666; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 2px; font-weight: 700; }
+
+        #main-map { height: 500px; width: 100%; background: #f4f4f4; border-bottom: 1px solid #000; z-index: 1; }
+
+        /* Busca */
         .search-section { background: #f9f9f9; padding: 30px 20px; border-bottom: 1px solid #ddd; }
-        .search-wrapper { max-width: 800px; margin: 0 auto; display: flex; position: relative; }
+        .search-wrapper { max-width: 800px; margin: 0 auto; display: flex; }
         input { width: 100%; padding: 18px; border: 1px solid #ccc; border-right: none; font-size: 16px; outline: none; border-radius: 0; }
-        input:focus { border-color: #000; outline: 2px solid #000; z-index: 2; }
-        button { padding: 0 40px; cursor: pointer; background: #000; color: #fff; border: 1px solid #000; font-weight: 800; text-transform: uppercase; font-size: 14px; border-radius: 0; }
-        button:hover { background: #333; border-color: #333; }
-        .aviso-filtro { display:none; background: #000; color: #fff; padding: 15px; text-align: center; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; }
+        input:focus { border-color: #000; outline: 2px solid #000; }
+        button { padding: 0 40px; cursor: pointer; background: #000; color: #fff; border: 1px solid #000; font-weight: 800; text-transform: uppercase; font-size: 14px; border-radius: 0; white-space: nowrap; }
+        button:hover { background: #333; }
+
+        .aviso-filtro { display:none; background: #000; color: #fff; padding: 15px; text-align: center; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; }
         .loader { display: none; text-align: center; padding: 20px; font-weight: bold; text-transform: uppercase; font-size: 0.8rem; }
+
         .grid-container { padding: 40px 20px; }
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 30px; }
+
+        /* Card Minimalista */
         .card { background: #fff; border: 1px solid #e5e5e5; display: flex; flex-direction: column; cursor: pointer; transition: all 0.2s ease; position: relative; }
         .card:hover { border-color: #000; box-shadow: 0 10px 30px rgba(0,0,0,0.08); transform: translateY(-2px); }
-        .card-img-top { width: 100%; height: 180px; object-fit: cover; display: none; }
+        .card-img-top { width: 100%; height: 180px; object-fit: cover; display: none; background: #f0f0f0; }
         .card-body { padding: 25px; display: flex; flex-direction: column; gap: 8px; flex-grow: 1; }
         .card-header { display: flex; justify-content: space-between; align-items: start; }
         .card h3 { margin: 0; font-size: 1.1rem; font-weight: 800; text-transform: uppercase; line-height: 1.2; }
         .badge { background: #000; color: #fff; padding: 3px 8px; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; height: fit-content; }
         .info-row { font-size: 0.9rem; color: #555; }
         .distancia-badge { margin-top: auto; font-size: 0.75rem; font-weight: bold; color: #000; border-top: 1px solid #eee; padding-top: 10px; }
+
+        /* Modal */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.95); z-index: 9999; justify-content: center; align-items: center; }
         .modal-body { background: white; width: 90%; max-width: 1100px; height: 85vh; border: 1px solid #ccc; display: flex; flex-direction: column; position: relative; box-shadow: 0 20px 50px rgba(0,0,0,0.2); }
         .modal-close { position: absolute; top: 20px; right: 20px; font-size: 40px; line-height: 0.5; cursor: pointer; background: transparent; border: none; color: #000; z-index: 50; padding: 10px; }
         .modal-content-grid { display: grid; grid-template-columns: 45% 55%; flex-grow: 1; overflow: hidden; }
         @media (max-width: 800px) { .modal-content-grid { grid-template-columns: 1fr; overflow-y: auto; } }
+        
         .col-info { padding: 50px 40px; overflow-y: auto; background: #fff; display: flex; flex-direction: column; gap: 20px; }
         .col-map { position: relative; height: 100%; background: #eee; }
         .modal-map { width: 100%; height: 100%; }
-        .modal-title { font-size: 2rem; font-weight: 900; text-transform: uppercase; margin: 0 0 10px 0; }
+        
+        .modal-title { font-size: 2rem; font-weight: 900; text-transform: uppercase; margin: 0 0 5px 0; }
+        .modal-meta { display: flex; gap: 10px; margin-bottom: 15px; }
+        .modal-badge-outline { border: 1px solid #000; color: #000; padding: 4px 8px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
         .modal-img-banner { width: 100%; height: 250px; object-fit: cover; margin-bottom: 10px; background: #eee; }
-        .detail-label { font-size: 0.7rem; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
-        .detail-text { font-size: 1rem; color: #000; line-height: 1.5; }
+        
+        .detail-label { font-size: 0.7rem; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 3px; }
+        .detail-text { font-size: 1rem; color: #000; line-height: 1.4; margin-bottom: 15px; }
         .detail-text a { color: #000; text-decoration: underline; font-weight: bold; }
+
         .admin-link { display: block; text-align: center; padding: 20px; color: #ccc; text-decoration: none; font-size: 0.8rem; text-transform: uppercase; }
     </style>
 </head>
 <body>
-    <header><h1>Soul Cycles</h1><div class="subtitle">Localizador de Lojas Autorizadas</div></header>
+    <header><h1>Soul Cycles</h1><div class="subtitle">Encontre um revendedor</div></header>
+    
     <div id="aviso" class="aviso-filtro"></div>
-    <div id="loader" class="loader">Buscando endereço e calculando rotas...</div>
+    <div id="loader" class="loader">BUSCANDO LOCALIZAÇÃO...</div>
     <div id="main-map"></div>
+
     <div class="search-section">
         <div class="search-wrapper">
-            <input type="text" id="buscaInput" placeholder="DIGITE O NOME, CIDADE OU CEP (Somente números)">
+            <input type="text" id="buscaInput" placeholder="BUSCAR POR CIDADE, NOME OU CEP">
             <button onclick="iniciarBusca()">BUSCAR</button>
         </div>
     </div>
+    
     <div class="grid-container">
-        <p class="subtitle" style="text-align: left; margin-bottom: 20px;">{{ qtd }} RESULTADOS</p>
+        <p class="subtitle" style="text-align: left; margin-bottom: 20px;">{{ qtd }} PONTOS ENCONTRADOS</p>
         <div id="lista" class="grid"></div>
     </div>
-    <a href="/admin" class="admin-link">Area Administrativa</a>
+    <a href="/admin" class="admin-link">ACESSO ADMINISTRATIVO</a>
+
     <div id="modalDetalhes" class="modal-overlay" onclick="fecharModal(event)">
         <div class="modal-body" onclick="event.stopPropagation()">
             <button class="modal-close" onclick="fecharModal()">×</button>
             <div class="modal-content-grid">
                 <div class="col-info">
-                    <div style="margin-bottom:20px;">
+                    <div>
                         <h2 class="modal-title" id="m_nome"></h2>
-                        <div style="display:flex; gap:10px;">
+                        <div class="modal-meta">
                             <span class="badge" id="m_perfil"></span>
-                            <span style="border:1px solid #000; padding:3px 8px; font-size:0.6rem; font-weight:700;" id="m_codigo_area"></span>
+                            <span class="modal-badge-outline" id="m_codigo_area"></span>
                         </div>
                     </div>
                     <img id="m_foto" class="modal-img-banner" src="" style="display:none;">
-                    <div><div class="detail-label">Localização</div><div class="detail-text" id="m_endereco"></div></div>
+                    
+                    <div><div class="detail-label">Local</div><div class="detail-text" id="m_endereco"></div></div>
                     <div><div class="detail-label">Contato</div><div class="detail-text" id="m_contato"></div></div>
-                    <div><div class="detail-label">Atendimento</div><div class="detail-text" id="m_horario"></div></div>
-                    <div><div class="detail-label">Links</div><div class="detail-text" id="m_links"></div></div>
-                    <div><div class="detail-label">Info</div><div class="detail-text" id="m_interno" style="font-size:0.8rem; color:#666;"></div></div>
+                    <div><div class="detail-label">Horários</div><div class="detail-text" id="m_horario"></div></div>
+                    <div><div class="detail-label">Ações</div><div class="detail-text" id="m_links"></div></div>
+                    <div><div class="detail-label">Interno</div><div class="detail-text" id="m_interno" style="font-size:0.8rem; color:#666;"></div></div>
                 </div>
                 <div class="col-map"><div id="modal-map" class="modal-map"></div></div>
             </div>
         </div>
     </div>
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         var mainMap = L.map('main-map').setView([-14.2350, -51.9253], 4);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 20 }).addTo(mainMap);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap', maxZoom: 20 }).addTo(mainMap);
         var markersLayer = L.layerGroup().addTo(mainMap);
         var radiusCircle = null;
         var modalMap = null;
         var allData = [];
 
-        // CORREÇÃO AQUI: Ajuste na leitura dos dados
         async function carregar() {
             let res = await fetch('/api/lojas');
             let dados = await res.json();
-            // Verifica se veio direto a lista ou dentro de um objeto
             allData = Array.isArray(dados) ? dados : (dados.lojas || []); 
             renderizar(allData);
         }
 
         function iniciarBusca() {
             let termo = document.getElementById('buscaInput').value.trim();
-            if(!termo) { if(radiusCircle) mainMap.removeLayer(radiusCircle); document.getElementById('aviso').style.display = 'none'; renderizar(allData); return; }
+            if(!termo) { 
+                if(radiusCircle) mainMap.removeLayer(radiusCircle);
+                document.getElementById('aviso').style.display = 'none';
+                renderizar(allData); return; 
+            }
             let cepLimpo = termo.replace(/\D/g, '');
-            if(cepLimpo.length === 8) { buscarPorCepNoCliente(cepLimpo); } else { buscarTextoLocal(termo); }
+            if(cepLimpo.length === 8) { buscarPorCepNoCliente(cepLimpo); } 
+            else { buscarTextoLocal(termo); }
         }
+
         function buscarTextoLocal(termo) {
             if(radiusCircle) mainMap.removeLayer(radiusCircle);
             document.getElementById('aviso').style.display = 'none';
@@ -138,6 +164,7 @@ HTML_PUBLICO = """
             renderizar(filtrados);
             if(filtrados.length > 0 && filtrados[0].lat) mainMap.setView([filtrados[0].lat, filtrados[0].lon], 10);
         }
+
         async function buscarPorCepNoCliente(cep) {
             document.getElementById('loader').style.display = 'block';
             document.getElementById('lista').style.opacity = '0.3';
@@ -145,44 +172,54 @@ HTML_PUBLICO = """
                 let viaCepRes = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
                 let endereco = await viaCepRes.json();
                 if(endereco.erro) { alert("CEP não encontrado."); return; }
+                
                 let buscaStr = `${endereco.logradouro}, ${endereco.localidade} - ${endereco.uf}, Brazil`;
                 let gpsRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(buscaStr)}`);
                 let gpsDados = await gpsRes.json();
+                
                 if(gpsDados.length === 0) {
                     buscaStr = `${endereco.localidade} - ${endereco.uf}, Brazil`;
                     gpsRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(buscaStr)}`);
                     gpsDados = await gpsRes.json();
                 }
+
                 if(gpsDados.length > 0) {
                     let userLat = parseFloat(gpsDados[0].lat);
                     let userLon = parseFloat(gpsDados[0].lon);
+                    
                     let lojasComDistancia = allData.map(loja => {
                         let dist = 99999;
                         if(loja.lat && loja.lon) { dist = getDistanceFromLatLonInKm(userLat, userLon, parseFloat(loja.lat), parseFloat(loja.lon)); }
                         return { ...loja, distancia: dist.toFixed(1) };
                     });
+                    
                     let lojasFiltradas = lojasComDistancia.filter(l => parseFloat(l.distancia) <= 100);
                     lojasFiltradas.sort((a, b) => parseFloat(a.distancia) - parseFloat(b.distancia));
+                    
                     renderizar(lojasFiltradas);
                     document.getElementById('aviso').style.display = 'block';
-                    document.getElementById('aviso').innerText = lojasFiltradas.length > 0 ? `ENCONTRADAS ${lojasFiltradas.length} LOJAS A ATÉ 100KM DE ${endereco.localidade}` : `NENHUMA LOJA ENCONTRADA A 100KM DE ${endereco.localidade}`;
+                    document.getElementById('aviso').innerText = `ENCONTRADAS ${lojasFiltradas.length} LOJAS A ATÉ 100KM DE ${endereco.localidade}`;
+                    
                     mainMap.setView([userLat, userLon], 8);
                     if(radiusCircle) mainMap.removeLayer(radiusCircle);
                     radiusCircle = L.circle([userLat, userLon], { color: '#000', fillColor: '#000', fillOpacity: 0.05, radius: 100000 }).addTo(mainMap);
                     mainMap.fitBounds(radiusCircle.getBounds());
-                } else { alert("Não foi possível localizar este endereço no mapa."); }
-            } catch (e) { console.error(e); alert("Erro ao conectar com serviço de mapas."); } finally { document.getElementById('loader').style.display = 'none'; document.getElementById('lista').style.opacity = '1'; }
+                } else { alert("Endereço do CEP não encontrado no mapa."); }
+            } catch (e) { console.error(e); } 
+            finally { document.getElementById('loader').style.display = 'none'; document.getElementById('lista').style.opacity = '1'; }
         }
+
         function getDistanceFromLatLonInKm(lat1,lon1,lat2,lon2) {
             var R = 6371; var dLat = deg2rad(lat2-lat1); var dLon = deg2rad(lon2-lon1); 
             var a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
             var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); return R * c; 
         }
         function deg2rad(deg) { return deg * (Math.PI/180); }
+
         function renderizar(lojas) {
             markersLayer.clearLayers();
             let html = '';
-            if (!lojas || lojas.length === 0) html = '<p style="text-align:center; grid-column:1/-1; color:#999;">Nenhuma loja encontrada.</p>';
+            if (lojas.length === 0) html = '<p style="text-align:center; grid-column:1/-1; color:#999;">Nenhuma loja encontrada.</p>';
             else {
                 lojas.forEach(l => {
                     if(l.lat && l.lon) {
@@ -191,7 +228,7 @@ HTML_PUBLICO = """
                         markersLayer.addLayer(m);
                     }
                     let imgHtml = l.foto ? `<img src="/static/uploads/${l.foto}" class="card-img-top" style="display:block;">` : '';
-                    let distHtml = l.distancia && l.distancia < 9999 ? `<div class="distancia-badge">${l.distancia} KM DA SUA LOCALIZAÇÃO</div>` : '';
+                    let distHtml = l.distancia && l.distancia < 9999 ? `<div class="distancia-badge">${l.distancia} KM</div>` : '';
                     html += `
                     <div class="card" onclick='abrirModal(${JSON.stringify(l)})'>
                         ${imgHtml}
@@ -205,28 +242,36 @@ HTML_PUBLICO = """
             }
             document.getElementById('lista').innerHTML = html;
         }
+
         function abrirModal(l) {
             document.getElementById('m_nome').innerText = l.nome;
             document.getElementById('m_perfil').innerText = l.perfil;
             document.getElementById('m_codigo_area').innerText = l.codigo ? `COD: ${l.codigo}` : '';
             document.getElementById('m_codigo_area').style.display = l.codigo ? 'block' : 'none';
-            document.getElementById('m_endereco').innerText = `${l.endereco}, ${l.numero} - ${l.bairro || ''}`;
-            let contatoHtml = "";
-            if(l.telefone) contatoHtml += `${l.telefone}<br>`;
-            if(l.email) contatoHtml += `${l.email}<br>`;
-            if(l.contato) contatoHtml += `Resp: ${l.contato}`;
-            document.getElementById('m_contato').innerHTML = contatoHtml || "-";
-            let horaHtml = "";
-            if(l.horario_seg_sex) horaHtml += `Seg-Sex: ${l.horario_seg_sex}<br>`;
-            if(l.horario_sab) horaHtml += `Sáb: ${l.horario_sab}`;
-            document.getElementById('m_horario').innerHTML = horaHtml || "-";
+            document.getElementById('m_endereco').innerText = `${l.endereco}, ${l.numero} - ${l.bairro || ''} (CEP: ${l.cep || ''})`;
+            
+            let contato = [];
+            if(l.telefone) contato.push(l.telefone);
+            if(l.email) contato.push(l.email);
+            if(l.contato) contato.push(`Resp: ${l.contato}`);
+            if(l.cnpj) contato.push(`CNPJ: ${l.cnpj}`);
+            document.getElementById('m_contato').innerHTML = contato.join('<br>') || '-';
+
+            let horario = [];
+            if(l.horario_seg_sex) horario.push(`Seg-Sex: ${l.horario_seg_sex}`);
+            if(l.horario_sab) horario.push(`Sáb: ${l.horario_sab}`);
+            document.getElementById('m_horario').innerHTML = horario.join('<br>') || '-';
+
             document.getElementById('m_interno').innerText = `Vendedor: ${l.vendedor || '-'} | Time: ${l.time_soul || '-'}`;
-            let linksHtml = "";
-            if(l.telefone) linksHtml += `<a href="https://wa.me/55${l.telefone.replace(/\D/g,'')}" target="_blank">WHATSAPP</a> &nbsp;&nbsp; `;
-            if(l.instagram) linksHtml += `<a href="https://instagram.com/${l.instagram.replace('@','').replace('/','')}" target="_blank">INSTAGRAM</a>`;
-            document.getElementById('m_links').innerHTML = linksHtml;
+
+            let links = '';
+            if(l.telefone) links += `<a href="https://wa.me/55${l.telefone.replace(/\D/g,'')}" target="_blank">WHATSAPP</a> &nbsp; `;
+            if(l.instagram) links += `<a href="https://instagram.com/${l.instagram.replace('@','').replace('/','')}" target="_blank">INSTAGRAM</a>`;
+            document.getElementById('m_links').innerHTML = links;
+
             let img = document.getElementById('m_foto');
             if(l.foto) { img.src = "/static/uploads/" + l.foto; img.style.display = "block"; } else { img.style.display = "none"; }
+
             document.getElementById('modalDetalhes').style.display = 'flex';
             setTimeout(() => {
                 if (!modalMap) {
@@ -250,7 +295,7 @@ HTML_PUBLICO = """
 </html>
 """
 
-# --- HTML ADMIN (MANTIDO E FUNCIONAL) ---
+# --- HTML ADMIN (COMPLETO E EDITÁVEL) ---
 HTML_ADMIN = """
 <!DOCTYPE html>
 <html>
@@ -265,17 +310,20 @@ HTML_ADMIN = """
         .btn-danger { background: #dc3545; }
         .btn-warning { background: #ffc107; color: #000; }
         .btn-gps { background: #007bff; color: white; }
+        
         input, select { padding: 10px; width: 100%; border: 1px solid #ccc; box-sizing: border-box; margin-bottom: 5px; }
         label { font-size: 0.7rem; font-weight: bold; color: #666; text-transform: uppercase; }
+        
         table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 0.9rem; }
         th { background: #000; color: #fff; text-align: left; padding: 10px; text-transform: uppercase; font-size: 0.8rem; }
         td { padding: 10px; border-bottom: 1px solid #eee; }
         tr:hover { background: #f9f9f9; }
+        
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 999; overflow-y: auto; }
-        .modal-content { background: white; width: 90%; max-width: 800px; margin: 50px auto; padding: 30px; }
+        .modal-content { background: white; width: 90%; max-width: 900px; margin: 30px auto; padding: 30px; }
         .form-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
         .col-1 { grid-column: span 1; } .col-2 { grid-column: span 2; } .col-4 { grid-column: span 4; }
-        .section-title { grid-column: span 4; margin-top: 20px; border-bottom: 1px solid #eee; font-weight: bold; text-transform: uppercase; }
+        .section-title { grid-column: span 4; margin-top: 15px; border-bottom: 1px solid #eee; font-weight: bold; text-transform: uppercase; color: #000; }
         .gps-msg { grid-column: span 4; font-size: 0.8rem; font-weight: bold; color: #007bff; display: none; }
     </style>
 </head>
@@ -289,33 +337,46 @@ HTML_ADMIN = """
             <div class="modal-content">
                 <h3 style="text-transform:uppercase;">Nova Loja <button onclick="fecharAdd()" class="btn btn-danger" style="float:right">X</button></h3>
                 <form action="/admin/add" method="POST" enctype="multipart/form-data" class="form-grid">
-                    <div class="section-title">Dados</div>
-                    <div class="col-2"><label>Nome</label><input type="text" name="nome" id="a_nome" required></div>
-                    <div class="col-1"><label>Perfil</label><select name="perfil" id="a_perfil"><option>Loja</option><option>Mecânico</option><option>Revenda</option></select></div>
+                    <div class="section-title">Dados Principais</div>
+                    <div class="col-2"><label>Nome Fantasia</label><input type="text" name="nome" id="a_nome" required></div>
                     <div class="col-1"><label>Código</label><input type="text" name="codigo" id="a_codigo"></div>
-                    <div class="col-4"><label>Foto</label><input type="file" name="foto" accept="image/*"></div>
+                    <div class="col-1"><label>Perfil</label><select name="perfil" id="a_perfil"><option>Loja</option><option>Mecânico</option><option>Revenda</option></select></div>
+                    
+                    <div class="col-2"><label>CNPJ</label><input type="text" name="cnpj" id="a_cnpj"></div>
+                    <div class="col-2"><label>Contato (Pessoa)</label><input type="text" name="contato_nome" id="a_contato_nome"></div>
+                    
+                    <div class="col-4"><label>Foto da Loja</label><input type="file" name="foto" accept="image/*"></div>
                     
                     <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
-                        Endereço
-                        <button type="button" class="btn btn-gps" style="padding:5px 10px; font-size:0.7rem;" onclick="buscarGPS('a')">📍 Buscar Coordenadas</button>
+                        Localização (Geo)
+                        <button type="button" class="btn btn-gps" style="padding:5px 10px; font-size:0.7rem;" onclick="buscarGPS('a')">📍 Buscar GPS Automático</button>
                     </div>
                     <div id="a_gps_msg" class="gps-msg">Buscando...</div>
 
-                    <div class="col-2"><label>Rua</label><input type="text" name="endereco" id="a_endereco" required></div>
-                    <div class="col-1"><label>Nº</label><input type="text" name="numero" id="a_numero" required></div>
+                    <div class="col-2"><label>Endereço (Rua)</label><input type="text" name="endereco" id="a_endereco" required></div>
+                    <div class="col-1"><label>Número</label><input type="text" name="numero" id="a_numero" required></div>
                     <div class="col-1"><label>Bairro</label><input type="text" name="bairro" id="a_bairro"></div>
+                    
                     <div class="col-2"><label>Cidade</label><input type="text" name="municipio" id="a_municipio" required></div>
                     <div class="col-1"><label>UF</label><input type="text" name="uf" id="a_uf" required></div>
                     <div class="col-1"><label>CEP</label><input type="text" name="cep" id="a_cep"></div>
-                    
-                    <input type="hidden" name="lat" id="a_lat"><input type="hidden" name="lon" id="a_lon">
 
-                    <div class="section-title">Extras</div>
+                    <div class="col-1"><label>Latitude</label><input type="text" name="lat" id="a_lat" placeholder="-00.0000"></div>
+                    <div class="col-1"><label>Longitude</label><input type="text" name="lon" id="a_lon" placeholder="-00.0000"></div>
+                    <div class="col-2" style="display:flex; align-items:flex-end;"><small style="color:#999;">* Se a busca falhar, preencha manualmente.</small></div>
+
+                    <div class="section-title">Contatos e Redes</div>
                     <div class="col-2"><label>Telefone</label><input type="text" name="telefone" id="a_telefone"></div>
-                    <div class="col-2"><label>Vendedor</label><input type="text" name="vendedor" id="a_vendedor"></div>
-                    <input type="hidden" name="cnpj" id="a_cnpj"><input type="hidden" name="contato_nome" id="a_contato_nome">
+                    <div class="col-2"><label>E-mail</label><input type="text" name="email" id="a_email"></div>
+                    <div class="col-2"><label>Instagram</label><input type="text" name="instagram" id="a_instagram"></div>
                     
-                    <div class="col-4" style="margin-top:10px"><button class="btn" style="width:100%">Salvar Cadastro</button></div>
+                    <div class="section-title">Informações Internas</div>
+                    <div class="col-2"><label>Horário Seg-Sex</label><input type="text" name="horario_seg_sex" id="a_horario_seg_sex"></div>
+                    <div class="col-2"><label>Horário Sábado</label><input type="text" name="horario_sab" id="a_horario_sab"></div>
+                    <div class="col-2"><label>Vendedor Resp.</label><input type="text" name="vendedor" id="a_vendedor"></div>
+                    <div class="col-2"><label>Time Soul</label><input type="text" name="time_soul" id="a_time_soul"></div>
+                    
+                    <div class="col-4" style="margin-top:20px"><button class="btn" style="width:100%">SALVAR CADASTRO</button></div>
                 </form>
             </div>
         </div>
@@ -346,33 +407,43 @@ HTML_ADMIN = """
             <h3 style="text-transform:uppercase;">Editar <button onclick="fechar()" class="btn btn-danger" style="float:right">X</button></h3>
             <form action="/admin/update" method="POST" enctype="multipart/form-data" class="form-grid">
                 <input type="hidden" name="id" id="e_id">
-                <div class="col-2"><label>Código</label><input type="text" name="codigo" id="e_codigo"></div>
-                <div class="col-2"><label>Nome</label><input type="text" name="nome" id="e_nome" required></div>
+                
+                <div class="section-title">Dados Principais</div>
+                <div class="col-2"><label>Nome Fantasia</label><input type="text" name="nome" id="e_nome" required></div>
+                <div class="col-1"><label>Código</label><input type="text" name="codigo" id="e_codigo"></div>
+                <div class="col-1"><label>Perfil</label><select name="perfil" id="e_perfil"><option>Loja</option><option>Mecânico</option><option>Revenda</option></select></div>
+                <div class="col-2"><label>CNPJ</label><input type="text" name="cnpj" id="e_cnpj"></div>
+                <div class="col-2"><label>Contato (Pessoa)</label><input type="text" name="contato_nome" id="e_contato_nome"></div>
                 <div class="col-4"><label>Trocar Foto</label><input type="file" name="foto" accept="image/*"></div>
                 
                 <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
-                    Endereço
+                    Localização (Geo)
                     <button type="button" class="btn btn-gps" style="padding:5px 10px; font-size:0.7rem;" onclick="buscarGPS('e')">📍 Atualizar GPS</button>
                 </div>
                 <div id="e_gps_msg" class="gps-msg">Buscando...</div>
 
                 <div class="col-2"><label>Rua</label><input type="text" name="endereco" id="e_endereco"></div>
                 <div class="col-1"><label>Num</label><input type="text" name="numero" id="e_numero"></div>
-                <div class="col-1"><label>UF</label><input type="text" name="uf" id="e_uf"></div>
+                <div class="col-1"><label>Bairro</label><input type="text" name="bairro" id="e_bairro"></div>
                 <div class="col-2"><label>Cidade</label><input type="text" name="municipio" id="e_municipio"></div>
-                <div class="col-2"><label>Bairro</label><input type="text" name="bairro" id="e_bairro"></div>
+                <div class="col-1"><label>UF</label><input type="text" name="uf" id="e_uf"></div>
                 <div class="col-1"><label>CEP</label><input type="text" name="cep" id="e_cep"></div>
                 
-                <input type="hidden" name="lat" id="e_lat"><input type="hidden" name="lon" id="e_lon">
+                <div class="col-1"><label>Latitude</label><input type="text" name="lat" id="e_lat"></div>
+                <div class="col-1"><label>Longitude</label><input type="text" name="lon" id="e_lon"></div>
 
+                <div class="section-title">Contatos e Redes</div>
                 <div class="col-2"><label>Telefone</label><input type="text" name="telefone" id="e_telefone"></div>
+                <div class="col-2"><label>E-mail</label><input type="text" name="email" id="e_email"></div>
+                <div class="col-2"><label>Instagram</label><input type="text" name="instagram" id="e_instagram"></div>
+
+                <div class="section-title">Informações Internas</div>
+                <div class="col-2"><label>Horário Seg-Sex</label><input type="text" name="horario_seg_sex" id="e_horario_seg_sex"></div>
+                <div class="col-2"><label>Horário Sábado</label><input type="text" name="horario_sab" id="e_horario_sab"></div>
                 <div class="col-2"><label>Vendedor</label><input type="text" name="vendedor" id="e_vendedor"></div>
-                <input type="hidden" name="perfil" id="e_perfil">
-                <input type="hidden" name="cnpj" id="e_cnpj"><input type="hidden" name="contato_nome" id="e_contato_nome">
-                <input type="hidden" name="email" id="e_email"><input type="hidden" name="instagram" id="e_instagram">
-                <input type="hidden" name="horario_seg_sex" id="e_horario_seg_sex"><input type="hidden" name="horario_sab" id="e_horario_sab"><input type="hidden" name="time_soul" id="e_time_soul">
+                <div class="col-2"><label>Time Soul</label><input type="text" name="time_soul" id="e_time_soul"></div>
                 
-                <div class="col-4" style="margin-top:10px"><button class="btn" style="width:100%">Salvar Alterações</button></div>
+                <div class="col-4" style="margin-top:20px"><button class="btn" style="width:100%">SALVAR ALTERAÇÕES</button></div>
             </form>
         </div>
     </div>
@@ -391,7 +462,7 @@ HTML_ADMIN = """
             trs.forEach(tr => { tr.style.display = tr.innerText.toLowerCase().includes(termo) ? '' : 'none'; });
         }
 
-        // --- BUSCA GPS NO NAVEGADOR DO CLIENTE (Sem bloqueio de servidor) ---
+        // --- BUSCA GPS NO CLIENTE ---
         async function buscarGPS(prefixo) {
             let msgDiv = document.getElementById(prefixo + '_gps_msg');
             let rua = document.getElementById(prefixo + '_endereco').value;
@@ -414,14 +485,14 @@ HTML_ADMIN = """
                     document.getElementById(prefixo + '_lat').value = dados[0].lat;
                     document.getElementById(prefixo + '_lon').value = dados[0].lon;
                     msgDiv.style.color = 'green';
-                    msgDiv.innerText = 'Coordenadas encontradas! Pode salvar.';
+                    msgDiv.innerText = 'Encontrado! Verifique os campos de Lat/Lon.';
                 } else {
                     msgDiv.style.color = 'red';
-                    msgDiv.innerText = 'Endereço não encontrado no mapa.';
+                    msgDiv.innerText = 'Endereço não encontrado. Digite as coordenadas manualmente.';
                 }
             } catch(e) {
                 msgDiv.style.color = 'red';
-                msgDiv.innerText = 'Erro ao conectar.';
+                msgDiv.innerText = 'Erro ao conectar. Digite manualmente.';
             }
         }
     </script>
@@ -429,7 +500,7 @@ HTML_ADMIN = """
 </html>
 """
 
-# --- BACKEND SIMPLIFICADO ---
+# --- BACKEND ---
 def get_db():
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
@@ -437,7 +508,10 @@ def get_db():
 
 def init_db():
     conn = get_db()
+    # Tabela completa
     conn.execute('''CREATE TABLE IF NOT EXISTS lojas (id INTEGER PRIMARY KEY AUTOINCREMENT, codigo TEXT, perfil TEXT, nome TEXT, cnpj TEXT, contato TEXT, telefone TEXT, endereco TEXT, numero TEXT, bairro TEXT, uf TEXT, municipio TEXT, cep TEXT, horario_seg_sex TEXT, horario_sab TEXT, instagram TEXT, email TEXT, time_soul TEXT, vendedor TEXT, lat REAL, lon REAL, foto TEXT)''')
+    
+    # Importação
     if conn.execute('SELECT count(*) FROM lojas').fetchone()[0] == 0 and os.path.exists('dados.csv'):
         try:
             with open('dados.csv', mode='r', encoding='utf-8-sig') as f:
@@ -446,7 +520,8 @@ def init_db():
                 for row in reader:
                     r = {k.strip(): v for k, v in row.items() if k}
                     if not r.get('NOME'): continue
-                    conn.execute('''INSERT INTO lojas (codigo, perfil, nome, cnpj, contato, telefone, endereco, numero, bairro, uf, municipio, cep, horario_seg_sex, horario_sab, instagram, email, time_soul, vendedor) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (r.get('CODIGO'), r.get('PERFIL'), r.get('NOME'), r.get('CNPJ'), r.get('CONTATO'), r.get('TELEFONE'), r.get('ENDEREÇO'), r.get('NUMERO/COMPLEMENTO'), r.get('BAIRRO'), r.get('UF'), r.get('MUNICIPIO'), r.get('CEP'), r.get('SEG. A SEX.'), r.get('SÁBADO'), r.get('INSTAGRAM'), r.get('E-mail'), r.get('Time'), r.get('Vendedor')))
+                    conn.execute('''INSERT INTO lojas (codigo, perfil, nome, cnpj, contato, telefone, endereco, numero, bairro, uf, municipio, cep, horario_seg_sex, horario_sab, instagram, email, time_soul, vendedor) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', 
+                                 (r.get('CODIGO'), r.get('PERFIL'), r.get('NOME'), r.get('CNPJ'), r.get('CONTATO'), r.get('TELEFONE'), r.get('ENDEREÇO'), r.get('NUMERO/COMPLEMENTO'), r.get('BAIRRO'), r.get('UF'), r.get('MUNICIPIO'), r.get('CEP'), r.get('SEG. A SEX.'), r.get('SÁBADO'), r.get('INSTAGRAM'), r.get('E-mail'), r.get('Time'), r.get('Vendedor')))
         except: pass
     conn.commit()
     conn.close()
@@ -485,9 +560,8 @@ def add_loja():
             file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
 
     conn = get_db()
-    # Recebe LAT/LON direto do form (via JS)
-    conn.execute('''INSERT INTO lojas (codigo, perfil, nome, cnpj, contato, telefone, endereco, numero, bairro, municipio, uf, cep, vendedor, lat, lon, foto) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', 
-                 (f.get('codigo'), f.get('perfil'), f.get('nome'), f.get('cnpj'), f.get('contato_nome'), f.get('telefone'), f.get('endereco'), f.get('numero'), f.get('bairro'), f.get('municipio'), f.get('uf'), f.get('cep'), f.get('vendedor'), f.get('lat'), f.get('lon'), filename))
+    conn.execute('''INSERT INTO lojas (codigo, perfil, nome, cnpj, contato, telefone, endereco, numero, bairro, municipio, uf, cep, vendedor, lat, lon, foto, email, instagram, horario_seg_sex, horario_sab, time_soul) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', 
+                 (f.get('codigo'), f.get('perfil'), f.get('nome'), f.get('cnpj'), f.get('contato_nome'), f.get('telefone'), f.get('endereco'), f.get('numero'), f.get('bairro'), f.get('municipio'), f.get('uf'), f.get('cep'), f.get('vendedor'), f.get('lat'), f.get('lon'), filename, f.get('email'), f.get('instagram'), f.get('horario_seg_sex'), f.get('horario_sab'), f.get('time_soul')))
     conn.commit()
     conn.close()
     return redirect(url_for('admin', msg="Loja adicionada!"))
@@ -496,8 +570,8 @@ def add_loja():
 def update_loja():
     f = request.form
     id_loja = f['id']
-    sql = '''UPDATE lojas SET codigo=?, nome=?, endereco=?, numero=?, bairro=?, municipio=?, uf=?, telefone=?, vendedor=?, lat=?, lon=?'''
-    params = [f['codigo'], f['nome'], f['endereco'], f['numero'], f['bairro'], f['municipio'], f['uf'], f['telefone'], f['vendedor'], f['lat'], f['lon']]
+    sql = '''UPDATE lojas SET codigo=?, nome=?, endereco=?, numero=?, bairro=?, municipio=?, uf=?, telefone=?, vendedor=?, lat=?, lon=?, cnpj=?, contato=?, email=?, instagram=?, horario_seg_sex=?, horario_sab=?, time_soul=?, cep=?, perfil=?'''
+    params = [f['codigo'], f['nome'], f['endereco'], f['numero'], f['bairro'], f['municipio'], f['uf'], f['telefone'], f['vendedor'], f['lat'], f['lon'], f['cnpj'], f['contato_nome'], f['email'], f['instagram'], f['horario_seg_sex'], f['horario_sab'], f['time_soul'], f['cep'], f['perfil']]
     
     if 'foto' in request.files:
         file = request.files['foto']
