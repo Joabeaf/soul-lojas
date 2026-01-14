@@ -33,7 +33,6 @@ HTML_PUBLICO = """
         
         #main-map { height: 450px; width: 100%; border-radius: 12px; margin-bottom: 20px; border: 2px solid #ddd; z-index: 1; }
         
-        /* BUSCA */
         .search-container { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 20px; background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .input-group { display: flex; gap: 5px; flex-grow: 1; max-width: 500px; }
         input { padding: 12px; width: 100%; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
@@ -125,7 +124,7 @@ HTML_PUBLICO = """
         </div>
     </div>
     
-    <div id="aviso" class="aviso-filtro">Mostrando apenas lojas num raio de 100km do seu CEP.</div>
+    <div id="aviso" class="aviso-filtro"></div>
     <div id="loader" class="loader">Calculando rota e distâncias...</div>
     <div id="lista" class="grid"></div>
     
@@ -164,15 +163,15 @@ HTML_PUBLICO = """
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
+        // Foca o mapa inicialmente no Brasil
         var mainMap = L.map('main-map').setView([-14.2350, -51.9253], 4);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(mainMap);
         var markersLayer = L.layerGroup().addTo(mainMap);
-        var radiusCircle = null; // Círculo de 100km
+        var radiusCircle = null;
         var modalMap = null;
         var allData = [];
 
         async function carregar() {
-            // Carrega TODAS as lojas inicialmente
             let res = await fetch('/api/lojas');
             let dados = await res.json();
             allData = dados.lojas || []; 
@@ -188,34 +187,38 @@ HTML_PUBLICO = """
             document.getElementById('lista').style.opacity = '0.5';
 
             try {
-                // Chama a API que filtra por 100km
                 let res = await fetch('/api/lojas?cep=' + cep);
                 let resposta = await res.json();
                 
                 if(resposta.erro) {
                     alert(resposta.erro);
                 } else {
-                    // Atualiza a lista apenas com as lojas filtradas
                     let lojasFiltradas = resposta.lojas;
                     let centro = resposta.centro;
 
                     renderizar(lojasFiltradas);
                     
                     document.getElementById('aviso').style.display = 'block';
-                    document.getElementById('aviso').innerText = `Encontramos ${lojasFiltradas.length} lojas num raio de 100km do CEP ${cep}.`;
+                    if (lojasFiltradas.length > 0) {
+                        document.getElementById('aviso').innerText = `Encontramos ${lojasFiltradas.length} lojas num raio de 100km do CEP ${cep}.`;
+                    } else {
+                        document.getElementById('aviso').innerText = `Nenhuma loja encontrada num raio de 100km do CEP ${cep}.`;
+                    }
 
-                    // ZOOM NO ESTADO/REGIAO
                     if(centro) {
-                        mainMap.setView([centro[0], centro[1]], 8); // Zoom 8 é bom para visualizar raio de 100km
+                        // Zoom no local do CEP
+                        mainMap.setView([centro[0], centro[1]], 8);
                         
-                        // Desenha círculo de 100km
                         if(radiusCircle) mainMap.removeLayer(radiusCircle);
                         radiusCircle = L.circle([centro[0], centro[1]], {
-                            color: 'blue',
-                            fillColor: '#blue',
+                            color: '#007bff',
+                            fillColor: '#007bff',
                             fillOpacity: 0.1,
-                            radius: 100000 // 100km em metros
+                            radius: 100000 // 100km
                         }).addTo(mainMap);
+                        
+                        // Ajusta o mapa para caber o círculo
+                        mainMap.fitBounds(radiusCircle.getBounds());
                     }
                 }
             } catch (e) {
@@ -228,26 +231,22 @@ HTML_PUBLICO = """
         }
 
         function buscarTexto() {
-            // Limpa o círculo de CEP se houver
             if(radiusCircle) { mainMap.removeLayer(radiusCircle); radiusCircle = null; }
             document.getElementById('aviso').style.display = 'none';
 
             let termo = document.getElementById('buscaInput').value.toLowerCase();
             
-            // Se estiver vazio, recarrega tudo do backend para garantir
             if(!termo) { carregar(); return; }
 
-            // Filtra localmente na lista atual (ou recarrega tudo se preferir)
-            // Aqui vamos recarregar tudo para tirar o filtro de 100km se o usuário quiser buscar por nome
+            // Recarrega todos os dados sem filtro de distância
             fetch('/api/lojas').then(r => r.json()).then(d => {
                 let todas = d.lojas;
                 let filtrados = todas.filter(l => 
                     (l.nome + ' ' + l.municipio + ' ' + l.uf).toLowerCase().includes(termo)
                 );
                 renderizar(filtrados);
-                // Se tiver resultado, foca no primeiro
                 if(filtrados.length > 0 && filtrados[0].lat) {
-                    mainMap.setView([filtrados[0].lat, filtrados[0].lon], 6);
+                    mainMap.setView([filtrados[0].lat, filtrados[0].lon], 10);
                 }
             });
         }
@@ -263,7 +262,7 @@ HTML_PUBLICO = """
             markersLayer.clearLayers();
             let html = '';
             
-            if (!lojas || lojas.length === 0) html = '<p style="text-align:center; grid-column:1/-1;">Nenhuma loja encontrada nesta região.</p>';
+            if (!lojas || lojas.length === 0) html = '<p style="text-align:center; grid-column:1/-1;">Nenhuma loja encontrada.</p>';
             else {
                 lojas.forEach(l => {
                     if(l.lat && l.lon) {
@@ -575,11 +574,13 @@ def api_lojas():
     
     lista = [dict(ix) for ix in lojas]
 
-    # FILTRO POR CEP E DISTÂNCIA
+    # LOGICA DE DISTANCIA
     if cep_busca:
         try:
-            geolocator = Nominatim(user_agent="soul_cep")
-            location = geolocator.geocode(f"{cep_busca}, Brazil")
+            geolocator = Nominatim(user_agent="soul_cep_v2")
+            # Força a busca apenas no Brasil ('br')
+            location = geolocator.geocode(cep_busca, country_codes='br')
+            
             if location:
                 user_coords = (location.latitude, location.longitude)
                 lojas_proximas = []
@@ -587,12 +588,13 @@ def api_lojas():
                 for l in lista:
                     if l['lat'] and l['lon']:
                         store_coords = (l['lat'], l['lon'])
+                        # Calcula distância em KM
                         dist = geodesic(user_coords, store_coords).km
-                        if dist <= 100: # Filtro de 100 KM
+                        if dist <= 100: # Raio de 100km
                             l['distancia'] = round(dist, 1)
                             lojas_proximas.append(l)
                 
-                # Ordena da mais perto para a mais longe
+                # Ordena
                 lojas_proximas.sort(key=lambda x: x['distancia'])
                 
                 return jsonify({
@@ -600,7 +602,7 @@ def api_lojas():
                     'lojas': lojas_proximas
                 })
             else:
-                return jsonify({'erro': 'CEP não encontrado no mapa.'})
+                return jsonify({'erro': 'CEP não encontrado no Brasil.'})
         except Exception as e:
             print(e)
             return jsonify({'erro': 'Erro ao calcular rota.'})
