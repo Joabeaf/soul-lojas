@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, render_template_string, redirect, url_for, send_from_directory
+from flask import Flask, jsonify, request, render_template_string, redirect, url_for
 import sqlite3
 import csv
 import os
@@ -13,7 +13,6 @@ UPLOAD_FOLDER = 'static/uploads'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# Garante que a pasta existe
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
@@ -32,40 +31,78 @@ HTML_PUBLICO = """
         body { font-family: 'Segoe UI', sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #f4f6f8; }
         h1, .subtitle { text-align: center; }
         
-        /* Mapa Principal */
         #main-map { height: 400px; width: 100%; border-radius: 12px; margin-bottom: 20px; border: 2px solid #ddd; z-index: 1; }
         
-        /* Busca e Grid */
         .search-box { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
         input { padding: 12px; width: 60%; border: 1px solid #ccc; border-radius: 6px; }
         button { padding: 12px 25px; cursor: pointer; background: #000; color: #fff; border: none; border-radius: 6px; font-weight: bold; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
         
-        /* Card */
-        .card { background: #fff; padding: 20px; border-radius: 10px; border-left: 5px solid #000; box-shadow: 0 2px 5px rgba(0,0,0,0.05); cursor: pointer; transition: transform 0.2s; }
-        .card:hover { transform: translateY(-5px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-        .badge { float: right; background: #eee; padding: 2px 8px; font-size: 0.8em; font-weight: bold; border-radius: 4px; }
-        .info-row { font-size: 0.9em; margin: 5px 0; color: #555; }
-        .btn-ver-mais { display: block; width: 100%; text-align: center; background: #f0f0f0; padding: 8px; margin-top: 10px; border-radius: 4px; color: #333; font-weight: bold; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 15px; }
+        
+        /* NOVO DESIGN DO CARTÃO */
+        .card { 
+            background: #fff; 
+            border-radius: 12px; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05); 
+            cursor: pointer; 
+            transition: transform 0.2s; 
+            display: flex; /* Layout lado a lado */
+            align-items: center;
+            overflow: hidden;
+            border: 1px solid #eee;
+            padding: 15px;
+            gap: 15px;
+        }
+        .card:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); border-color: #000; }
+        
+        /* Quadrado da Foto */
+        .card-img-box { 
+            width: 70px; 
+            height: 70px; 
+            flex-shrink: 0; 
+            border-radius: 8px; 
+            overflow: hidden; 
+            background: #f0f0f0; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+        }
+        .card-img { width: 100%; height: 100%; object-fit: cover; }
+        
+        /* Letras (Iniciais) quando não tem foto */
+        .card-initials { 
+            font-size: 1.5em; 
+            font-weight: bold; 
+            color: #555; 
+            text-transform: uppercase; 
+        }
 
-        /* MODAL DE DETALHES */
+        /* Conteúdo do Texto */
+        .card-content { flex-grow: 1; min-width: 0; }
+        
+        .card-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 5px; }
+        .card h3 { margin: 0; font-size: 1.1em; color: #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .badge { background: #eee; padding: 2px 6px; font-size: 0.7em; font-weight: bold; border-radius: 4px; color: #666; text-transform: uppercase; }
+        
+        .info-row { font-size: 0.85em; color: #666; margin-bottom: 2px; }
+        .info-row.contact { color: #888; margin-top: 5px; font-size: 0.8em; }
+
+        /* MODAL (Janela Flutuante) */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; justify-content: center; align-items: center; }
-        .modal-body { background: white; width: 90%; max-width: 900px; max-height: 90vh; overflow-y: auto; border-radius: 10px; padding: 0; display: flex; flex-direction: column; position: relative; }
+        .modal-body { background: white; width: 90%; max-width: 900px; max-height: 90vh; overflow-y: auto; border-radius: 10px; position: relative; }
         .modal-close { position: absolute; top: 15px; right: 20px; font-size: 24px; cursor: pointer; background: none; border: none; font-weight: bold; color: #333; z-index: 10; }
         
         .modal-content-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 20px; }
         @media (max-width: 700px) { .modal-content-grid { grid-template-columns: 1fr; } }
 
-        .modal-img { width: 100%; height: 300px; object-fit: cover; border-radius: 8px; background: #eee; }
-        .modal-map { width: 100%; height: 300px; border-radius: 8px; border: 1px solid #ddd; }
+        .modal-img { width: 100%; height: 300px; object-fit: cover; border-radius: 8px; background: #eee; margin-bottom: 20px; }
+        .modal-map { width: 100%; height: 250px; border-radius: 8px; border: 1px solid #ddd; }
         
         .modal-header { padding: 20px; border-bottom: 1px solid #eee; background: #fafafa; }
         .modal-title { margin: 0; font-size: 1.8em; }
-        .modal-subtitle { color: #666; margin-top: 5px; }
-
-        .detail-item { margin-bottom: 10px; border-bottom: 1px solid #f9f9f9; padding-bottom: 5px; }
+        
+        .detail-item { margin-bottom: 12px; border-bottom: 1px solid #f9f9f9; padding-bottom: 5px; }
         .detail-label { font-weight: bold; color: #888; font-size: 0.8em; text-transform: uppercase; }
-        .detail-value { font-size: 1em; color: #333; }
         
         .admin-link { display: block; text-align: right; margin-top: 20px; color: #aaa; text-decoration: none; }
     </style>
@@ -90,20 +127,19 @@ HTML_PUBLICO = """
             <button class="modal-close" onclick="fecharModal()">×</button>
             
             <div class="modal-header">
-                <span class="badge" id="m_perfil"></span>
-                <h2 class="modal-title" id="m_nome">Nome da Loja</h2>
-                <div class="modal-subtitle" id="m_local">Cidade - UF</div>
+                <span class="badge" id="m_perfil" style="float:none; font-size:1em;"></span>
+                <h2 class="modal-title" id="m_nome">Nome</h2>
+                <div id="m_local" style="color:#666">Cidade - UF</div>
             </div>
 
             <div class="modal-content-grid">
                 <div>
-                    <div class="detail-item"><div class="detail-label">Endereço</div><div class="detail-value" id="m_endereco"></div></div>
-                    <div class="detail-item"><div class="detail-label">Contato</div><div class="detail-value" id="m_contato"></div></div>
-                    <div class="detail-item"><div class="detail-label">Horários</div><div class="detail-value" id="m_horario"></div></div>
-                    <div class="detail-item"><div class="detail-label">Vendedor / Time</div><div class="detail-value" id="m_interno"></div></div>
-                    <div class="detail-item"><div class="detail-label">Links</div><div class="detail-value" id="m_links"></div></div>
+                    <div class="detail-item"><div class="detail-label">Endereço</div><div id="m_endereco"></div></div>
+                    <div class="detail-item"><div class="detail-label">Contato</div><div id="m_contato"></div></div>
+                    <div class="detail-item"><div class="detail-label">Horários</div><div id="m_horario"></div></div>
+                    <div class="detail-item"><div class="detail-label">Interno</div><div id="m_interno"></div></div>
+                    <div class="detail-item"><div class="detail-label">Ações</div><div id="m_links"></div></div>
                 </div>
-
                 <div>
                     <img id="m_foto" class="modal-img" src="" style="display:none;">
                     <div id="modal-map" class="modal-map"></div>
@@ -114,14 +150,10 @@ HTML_PUBLICO = """
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        // Mapa Principal
         var mainMap = L.map('main-map').setView([-14.2350, -51.9253], 4);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(mainMap);
         var markersLayer = L.layerGroup().addTo(mainMap);
-        
-        // Mapa do Modal (inicia depois)
         var modalMap = null;
-
         var allData = [];
 
         async function carregar() {
@@ -130,61 +162,75 @@ HTML_PUBLICO = """
             renderizar(allData);
         }
 
+        function pegarIniciais(nome) {
+            if(!nome) return "SL"; // Soul Lojas
+            let partes = nome.trim().split(" ");
+            if (partes.length === 1) return partes[0].substring(0, 2).toUpperCase();
+            return (partes[0][0] + partes[1][0]).toUpperCase();
+        }
+
         function renderizar(lojas) {
             markersLayer.clearLayers();
             let html = '';
             
             lojas.forEach(l => {
-                // Pino no mapa principal
                 if(l.lat && l.lon) {
                     let m = L.marker([l.lat, l.lon]).bindPopup(`<b>${l.nome}</b>`);
-                    m.on('click', () => abrirModal(l)); // Clicar no pino abre o modal
+                    m.on('click', () => abrirModal(l));
                     markersLayer.addLayer(m);
                 }
+
+                // Lógica da Imagem ou Iniciais
+                let imagemHtml = '';
+                if (l.foto) {
+                    imagemHtml = `<img src="/static/uploads/${l.foto}" class="card-img">`;
+                } else {
+                    let iniciais = pegarIniciais(l.nome);
+                    imagemHtml = `<div class="card-initials">${iniciais}</div>`;
+                }
                 
-                // Card na lista
                 html += `
                 <div class="card" onclick='abrirModal(${JSON.stringify(l)})'>
-                    <span class="badge">${l.perfil || 'Loja'}</span>
-                    <h3>${l.nome}</h3>
-                    <div class="info-row">📍 ${l.municipio} - ${l.uf}</div>
-                    <div class="info-row">📞 ${l.telefone || '-'}</div>
-                    <div class="btn-ver-mais">Ver Detalhes Completos</div>
+                    <div class="card-img-box">
+                        ${imagemHtml}
+                    </div>
+                    <div class="card-content">
+                        <div class="card-header">
+                            <h3>${l.nome}</h3>
+                            <span class="badge">${l.perfil || 'Loja'}</span>
+                        </div>
+                        <div class="info-row">📍 ${l.municipio} - ${l.uf}</div>
+                        <div class="info-row contact">📞 ${l.telefone || ''}</div>
+                    </div>
                 </div>`;
             });
             document.getElementById('lista').innerHTML = html;
         }
 
         function abrirModal(l) {
-            // Preenche textos
             document.getElementById('m_nome').innerText = l.nome;
             document.getElementById('m_perfil').innerText = l.perfil;
             document.getElementById('m_local').innerText = `${l.municipio} - ${l.uf}`;
             document.getElementById('m_endereco').innerText = `${l.endereco}, ${l.numero} - ${l.bairro || ''} (CEP: ${l.cep || ''})`;
             
-            // Contato
             let contatoHtml = "";
             if(l.telefone) contatoHtml += `Tel: ${l.telefone}<br>`;
             if(l.email) contatoHtml += `Email: ${l.email}<br>`;
             if(l.contato) contatoHtml += `Resp: ${l.contato}`;
             document.getElementById('m_contato').innerHTML = contatoHtml || "-";
 
-            // Horários
             let horaHtml = "";
             if(l.horario_seg_sex) horaHtml += `Seg-Sex: ${l.horario_seg_sex}<br>`;
             if(l.horario_sab) horaHtml += `Sáb: ${l.horario_sab}`;
             document.getElementById('m_horario').innerHTML = horaHtml || "-";
 
-            // Dados Internos (Vendedor/Time)
             document.getElementById('m_interno').innerText = `Vendedor: ${l.vendedor || '-'} | Time: ${l.time_soul || '-'}`;
 
-            // Links
             let linksHtml = "";
-            if(l.telefone) linksHtml += `<a href="https://wa.me/55${l.telefone.replace(/\D/g,'')}" target="_blank" style="color:green; font-weight:bold;">WhatsApp</a> | `;
+            if(l.telefone) linksHtml += `<a href="https://wa.me/55${l.telefone.replace(/\D/g,'')}" target="_blank" style="color:green; font-weight:bold; margin-right:10px;">WhatsApp</a>`;
             if(l.instagram) linksHtml += `<a href="https://instagram.com/${l.instagram.replace('@','').replace('/','')}" target="_blank" style="color:#E1306C; font-weight:bold;">Instagram</a>`;
             document.getElementById('m_links').innerHTML = linksHtml;
 
-            // Foto
             let img = document.getElementById('m_foto');
             if(l.foto) {
                 img.src = "/static/uploads/" + l.foto;
@@ -193,24 +239,18 @@ HTML_PUBLICO = """
                 img.style.display = "none";
             }
 
-            // Exibe o Modal
             document.getElementById('modalDetalhes').style.display = 'flex';
 
-            // Configura o Mapa do Modal (com delay para renderizar correto)
             setTimeout(() => {
                 if (!modalMap) {
                     modalMap = L.map('modal-map');
                     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(modalMap);
                 }
-                
                 if (l.lat && l.lon) {
-                    modalMap.setView([l.lat, l.lon], 15); // Zoom bem perto
-                    // Remove marcadores antigos do modal
-                    modalMap.eachLayer((layer) => {
-                        if (layer instanceof L.Marker) { modalMap.removeLayer(layer); }
-                    });
+                    modalMap.setView([l.lat, l.lon], 15);
+                    modalMap.eachLayer((layer) => { if (layer instanceof L.Marker) modalMap.removeLayer(layer); });
                     L.marker([l.lat, l.lon]).addTo(modalMap);
-                    modalMap.invalidateSize(); // Corrige bug gráfico
+                    modalMap.invalidateSize();
                 } else {
                     modalMap.setView([-14.23, -51.92], 4);
                 }
@@ -251,7 +291,6 @@ HTML_ADMIN = """
         .btn-warning { background: #ffc107; color: #000; }
         .btn-info { background: #17a2b8; }
         
-        /* Modal e Form */
         #form-container { display: none; background: #f9f9f9; padding: 20px; border: 1px solid #ddd; margin-bottom: 20px; border-radius: 8px; }
         .form-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
         .col-1 { grid-column: span 1; } .col-2 { grid-column: span 2; } .col-4 { grid-column: span 4; }
@@ -262,7 +301,6 @@ HTML_ADMIN = """
         table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.85em; }
         th, td { padding: 8px; border-bottom: 1px solid #ddd; text-align: left; }
         
-        /* Modal de Edição */
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; overflow-y: auto; }
         .modal-content { background: white; width: 95%; max-width: 800px; margin: 30px auto; padding: 20px; border-radius: 8px; }
     </style>
@@ -285,11 +323,7 @@ HTML_ADMIN = """
                     <select name="perfil"><option>Loja</option><option>Mecânico</option><option>Revenda</option></select>
                 </div>
                 <div class="col-1"><label>Código</label><input type="text" name="codigo"></div>
-                
-                <div class="col-4">
-                    <label>📸 Foto da Loja</label>
-                    <input type="file" name="foto" accept="image/*">
-                </div>
+                <div class="col-4"><label>📸 Foto da Loja</label><input type="file" name="foto" accept="image/*"></div>
 
                 <div class="section-title">Localização</div>
                 <div class="col-2"><label>Rua</label><input type="text" name="endereco" required></div>
@@ -318,10 +352,7 @@ HTML_ADMIN = """
                 <tr>
                     <td><b>{{ loja['nome'] }}</b><br><small>{{ loja['perfil'] }}</small></td>
                     <td>{{ loja['municipio'] }}-{{ loja['uf'] }}</td>
-                    <td>
-                        {% if loja['foto'] %} <a href="/static/uploads/{{ loja['foto'] }}" target="_blank">Ver Foto</a>
-                        {% else %} - {% endif %}
-                    </td>
+                    <td>{% if loja['foto'] %}✅{% else %}❌{% endif %}</td>
                     <td>
                         <button onclick='editar({{ loja | tojson }})' class="btn btn-warning">✏️</button>
                         <a href="/admin/delete/{{ loja['id'] }}" onclick="return confirm('Apagar?')" class="btn btn-danger">🗑️</a>
@@ -340,18 +371,12 @@ HTML_ADMIN = """
                 <input type="hidden" name="id" id="e_id">
                 
                 <div class="col-4"><label>Nome</label><input type="text" name="nome" id="e_nome" required></div>
-                
-                <div class="col-4">
-                    <label>Trocar Foto (Deixe em branco para manter a atual)</label>
-                    <input type="file" name="foto" accept="image/*">
-                </div>
-
+                <div class="col-4"><label>Trocar Foto</label><input type="file" name="foto" accept="image/*"></div>
                 <div class="col-2"><label>Rua</label><input type="text" name="endereco" id="e_endereco"></div>
                 <div class="col-1"><label>Num</label><input type="text" name="numero" id="e_numero"></div>
                 <div class="col-1"><label>UF</label><input type="text" name="uf" id="e_uf"></div>
                 <div class="col-2"><label>Cidade</label><input type="text" name="municipio" id="e_municipio"></div>
                 <div class="col-2"><label>Bairro</label><input type="text" name="bairro" id="e_bairro"></div>
-                
                 <div class="col-2"><label>Telefone</label><input type="text" name="telefone" id="e_telefone"></div>
                 <div class="col-2"><label>Vendedor</label><input type="text" name="vendedor" id="e_vendedor"></div>
 
@@ -371,7 +396,6 @@ HTML_ADMIN = """
         function fechar() { document.getElementById('modalEdit').style.display = 'none'; }
         function editar(l) {
             document.getElementById('modalEdit').style.display = 'block';
-            // Preenche campos principais
             ['id','nome','endereco','numero','bairro','municipio','uf','telefone','vendedor',
              'perfil','codigo','cnpj','contato_nome','cep','email','instagram','horario_seg_sex','horario_sab','time_soul']
              .forEach(field => {
@@ -401,7 +425,6 @@ def allowed_file(filename):
 
 def init_db():
     conn = get_db()
-    # Adicionada coluna 'foto'
     conn.execute('''
         CREATE TABLE IF NOT EXISTS lojas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -413,8 +436,7 @@ def init_db():
             lat REAL, lon REAL, foto TEXT
         )
     ''')
-    
-    # Importação Simples se vazio
+    # Import CSV se vazio
     if conn.execute('SELECT count(*) FROM lojas').fetchone()[0] == 0 and os.path.exists('dados.csv'):
         try:
             with open('dados.csv', mode='r', encoding='utf-8-sig') as f:
@@ -476,7 +498,6 @@ def add_loja():
     endereco_completo = f"{f['endereco']}, {f['numero']} - {f['municipio']}, {f['uf']}, Brazil"
     lat, lon = geocode_address(endereco_completo)
     
-    # Processamento da Imagem
     filename = None
     if 'foto' in request.files:
         file = request.files['foto']
@@ -504,16 +525,13 @@ def update_loja():
     endereco_completo = f"{f['endereco']}, {f['numero']} - {f['municipio']}, {f['uf']}, Brazil"
     lat, lon = geocode_address(endereco_completo)
     
-    # Update básico
     sql = '''UPDATE lojas SET nome=?, endereco=?, numero=?, bairro=?, municipio=?, uf=?, telefone=?, vendedor=?'''
     params = [f['nome'], f['endereco'], f['numero'], f['bairro'], f['municipio'], f['uf'], f['telefone'], f['vendedor']]
     
-    # Se achou GPS, atualiza
     if lat and lon:
         sql += ", lat=?, lon=?"
         params.extend([lat, lon])
         
-    # Se enviou nova foto, atualiza
     if 'foto' in request.files:
         file = request.files['foto']
         if file and allowed_file(file.filename):
@@ -541,7 +559,6 @@ def delete_loja(id):
 
 @app.route('/admin/geo/<int:id>')
 def force_geo(id):
-    # (Mantido igual ao anterior, código omitido para economizar espaço mas funcionalidade inclusa no Admin)
     conn = get_db()
     l = conn.execute('SELECT * FROM lojas WHERE id = ?', (id,)).fetchone()
     if l:
