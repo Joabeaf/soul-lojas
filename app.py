@@ -1,46 +1,45 @@
 from flask import Flask, jsonify, request
-import csv
 import os
 
 app = Flask(__name__)
 
-def carregar_dados():
-    lojas = []
-    # Verifica se o arquivo existe antes de tentar ler
-    if not os.path.exists('dados.csv'):
-        print("ERRO: O arquivo dados.csv não foi encontrado.")
-        return []
-
-    try:
-        # Lê o arquivo CSV usando a biblioteca nativa do Python (super leve)
-        with open('dados.csv', mode='r', encoding='utf-8-sig') as f:
-            # O delimiter=';' ou ',' depende do seu Excel. 
-            # O Python tenta adivinhar, mas se der erro, trocamos para delimiter=';'
-            leitor = csv.DictReader(f) 
-            
-            for linha in leitor:
-                # Limpeza: remove espaços das chaves e valores
-                item_limpo = {}
-                for k, v in linha.items():
-                    chave = str(k).strip().lower().replace(' ', '_')
-                    valor = str(v).strip()
-                    item_limpo[chave] = valor
-                lojas.append(item_limpo)
-    except Exception as e:
-        print(f"Erro ao ler CSV: {e}")
-        
-    return lojas
+# --- DADOS DAS LOJAS (DENTRO DO CÓDIGO) ---
+# Aqui eliminamos o erro de leitura de arquivo.
+# Você pode adicionar quantas lojas quiser seguindo esse modelo.
+LOJAS_DB = [
+    {
+        "loja": "Soul Cycles Itajaí",
+        "cidade": "Itajai",
+        "estado": "SC",
+        "endereco": "Rua Exemplo",
+        "numero": "100",
+        "telefone": "(47) 9999-9999"
+    },
+    {
+        "loja": "Bike Shop Balneário",
+        "cidade": "Balneario Camboriu",
+        "estado": "SC",
+        "endereco": "Av Atlantica",
+        "numero": "500",
+        "telefone": "(47) 8888-8888"
+    },
+    {
+        "loja": "Pedal São Paulo",
+        "cidade": "Sao Paulo",
+        "estado": "SP",
+        "endereco": "Av Paulista",
+        "numero": "1000",
+        "telefone": "(11) 9999-9999"
+    }
+]
+# ------------------------------------------
 
 @app.route('/')
 def home():
-    # Carrega os dados para ver se está funcionando
-    dados = carregar_dados()
-    qtd = len(dados)
-    
-    return f"""
+    return """
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h1>Busca Soul</h1>
-        <p>Status: <strong>{qtd} lojas carregadas.</strong></p>
+        <h1>Busca Soul (Modo Seguro)</h1>
+        <p>Se você está vendo isso, o erro 500 sumiu!</p>
         <hr>
         <p>Digite sua cidade:</p>
         <input type="text" id="cidadeInput" placeholder="Ex: Itajai">
@@ -55,22 +54,14 @@ def home():
             let dados = await response.json();
             
             let html = '';
-            if(dados.length === 0) html = '<p>Nenhuma loja encontrada nesta cidade.</p>';
+            if(dados.length === 0) html = '<p>Nenhuma loja encontrada.</p>';
             
             dados.forEach(loja => {
-                // Tenta encontrar o nome da loja em várias colunas possíveis
-                let nome = loja.loja || loja.nome || loja.revenda || 'Loja Soul';
-                let end = loja.endereço || loja.endereco || '';
-                let num = loja.número || loja.numero || '';
-                let tel = loja.telefone || loja.celular || '';
-                let cid = loja.cidade || '';
-                let est = loja.estado || loja.uf || '';
-
                 html += `<div style="border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; border-radius: 5px;">
-                    <h3>${nome}</h3>
-                    <p><strong>Local:</strong> ${cid} - ${est}</p>
-                    <p><strong>Endereço:</strong> ${end}, ${num}</p>
-                    <p><strong>Contato:</strong> ${tel}</p>
+                    <h3>${loja.loja}</h3>
+                    <p><strong>Local:</strong> ${loja.cidade} - ${loja.estado}</p>
+                    <p><strong>Endereço:</strong> ${loja.endereco}, ${loja.numero}</p>
+                    <p><strong>Telefone:</strong> ${loja.telefone}</p>
                 </div>`;
             });
             document.getElementById('resultado').innerHTML = html;
@@ -81,15 +72,15 @@ def home():
 @app.route('/lojas')
 def get_lojas():
     cidade_busca = request.args.get('cidade', '').lower()
-    todas = carregar_dados()
     
+    # Se não digitou nada, retorna tudo
     if not cidade_busca:
-        return jsonify(todas)
+        return jsonify(LOJAS_DB)
     
-    # Filtro simples
+    # Filtra a lista que está na memória
     resultado = [
-        loja for loja in todas 
-        if cidade_busca in str(loja.get('cidade', '')).lower()
+        loja for loja in LOJAS_DB 
+        if cidade_busca in loja['cidade'].lower()
     ]
     return jsonify(resultado)
 
