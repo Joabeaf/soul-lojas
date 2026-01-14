@@ -20,7 +20,7 @@ if not os.path.exists(UPLOAD_FOLDER):
 
 DB_NAME = "lojas.db"
 
-# --- HTML PÚBLICO (SITE) ---
+# --- HTML PÚBLICO (SITE - ESTILO TREK) ---
 HTML_PUBLICO = """
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -30,132 +30,292 @@ HTML_PUBLICO = """
     <title>Rede Autorizada Soul</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { font-family: 'Segoe UI', sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #f4f6f8; color: #333; }
-        h1, .subtitle { text-align: center; }
+        /* FONTE E BASE */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
         
-        #main-map { height: 450px; width: 100%; border-radius: 12px; margin-bottom: 20px; border: 2px solid #ddd; z-index: 1; }
-        
-        .search-container { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 20px; background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .input-group { display: flex; gap: 5px; flex-grow: 1; max-width: 500px; }
-        input { padding: 12px; width: 100%; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
-        button { padding: 12px 20px; cursor: pointer; background: #000; color: #fff; border: none; border-radius: 6px; font-weight: bold; white-space: nowrap; transition: background 0.2s; }
-        button:hover { background: #333; }
-        button.btn-cep { background: #007bff; }
-        button.btn-cep:hover { background: #0056b3; }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            max-width: 1400px; 
+            margin: 0 auto; 
+            padding: 0; 
+            background: #fff; 
+            color: #111; 
+        }
 
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 15px; }
+        /* HEADER */
+        header { padding: 40px 20px; text-align: center; border-bottom: 1px solid #eee; margin-bottom: 30px; }
+        h1 { 
+            text-transform: uppercase; 
+            letter-spacing: 2px; 
+            font-weight: 900; 
+            font-size: 2.5rem; 
+            margin: 0 0 10px 0; 
+        }
+        .subtitle { color: #666; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; }
+
+        /* MAPA */
+        #main-map { 
+            height: 500px; 
+            width: 100%; 
+            background: #f4f4f4; 
+            margin-bottom: 0; 
+            z-index: 1; 
+            border-bottom: 1px solid #000;
+        }
+
+        /* BARRA DE BUSCA (Preto e Branco) */
+        .search-section { background: #f9f9f9; padding: 30px 20px; border-bottom: 1px solid #ddd; }
+        .search-container { 
+            display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; max-width: 900px; margin: 0 auto; 
+        }
+        .input-group { flex-grow: 1; min-width: 250px; position: relative; }
         
-        /* CARD */
+        input { 
+            width: 100%; 
+            padding: 15px; 
+            border: 1px solid #ccc; 
+            border-radius: 0; /* Quadrado */
+            font-size: 14px; 
+            font-family: 'Inter', sans-serif;
+            box-sizing: border-box;
+            background: #fff;
+        }
+        input:focus { outline: 2px solid #000; border-color: #000; }
+
+        button { 
+            padding: 15px 30px; 
+            cursor: pointer; 
+            background: #000; 
+            color: #fff; 
+            border: 1px solid #000; 
+            border-radius: 0; /* Quadrado */
+            font-weight: 700; 
+            text-transform: uppercase; 
+            letter-spacing: 1px; 
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        button:hover { background: #fff; color: #000; }
+        button.btn-cep { background: #333; border-color: #333; }
+
+        /* MENSAGENS E LOADER */
+        .loader { display: none; text-align: center; padding: 20px; color: #000; font-weight: bold; text-transform: uppercase; font-size: 0.8rem; }
+        .aviso-filtro { 
+            display:none; 
+            background: #000; 
+            color: #fff; 
+            padding: 10px; 
+            text-align: center; 
+            font-size: 0.8rem; 
+            text-transform: uppercase; 
+            letter-spacing: 1px;
+        }
+
+        /* GRID DE LOJAS */
+        .grid-container { padding: 40px 20px; background: #fff; }
+        .grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); 
+            gap: 30px; 
+        }
+
+        /* CARTÃO (Design Trek) */
         .card { 
-            background: #fff; border-radius: 12px; 
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05); 
-            cursor: pointer; transition: transform 0.2s; 
-            display: flex; align-items: center; 
-            padding: 15px; gap: 15px; border: 1px solid #eee; position: relative;
+            background: #fff; 
+            border: 1px solid #e5e5e5; 
+            border-radius: 0; 
+            display: flex; 
+            flex-direction: column; /* Vertical em mobile first */
+            cursor: pointer; 
+            transition: all 0.2s ease;
+            position: relative;
         }
-        .card:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); border-color: #000; }
-        
-        .card-img-box { 
-            width: 60px; height: 60px; flex-shrink: 0; 
-            border-radius: 50%; overflow: hidden; 
-            background: #f0f0f0; display: flex; justify-content: center; align-items: center; border: 1px solid #ddd;
-        }
-        .card-img { width: 100%; height: 100%; object-fit: cover; }
-        .card-initials { font-size: 1.2em; font-weight: bold; color: #555; text-transform: uppercase; }
+        .card:hover { border-color: #000; box-shadow: 0 10px 30px rgba(0,0,0,0.08); transform: translateY(-2px); }
 
-        .card-content { flex-grow: 1; min-width: 0; }
-        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
-        .card h3 { margin: 0; font-size: 1.1em; color: #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .badge { background: #eee; padding: 2px 6px; font-size: 0.7em; font-weight: bold; border-radius: 4px; color: #666; text-transform: uppercase; }
-        .info-row { font-size: 0.9em; color: #666; }
+        .card-body { padding: 25px; display: flex; flex-direction: column; gap: 10px; flex-grow: 1; }
         
+        .card-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px; }
+        .card h3 { 
+            margin: 0; 
+            font-size: 1.1rem; 
+            font-weight: 800; 
+            text-transform: uppercase; 
+            line-height: 1.2;
+        }
+        
+        .badge { 
+            background: #000; 
+            color: #fff; 
+            padding: 3px 8px; 
+            font-size: 0.6rem; 
+            font-weight: 700; 
+            text-transform: uppercase; 
+            letter-spacing: 1px;
+            height: fit-content;
+        }
+
+        .info-row { font-size: 0.9rem; color: #555; }
         .distancia-badge {
-            background: #e3f2fd; color: #0d47a1; font-weight: bold; font-size: 0.85em;
-            padding: 4px 8px; border-radius: 4px; margin-top: 5px; display: inline-block;
+            margin-top: auto; 
+            font-size: 0.75rem; 
+            font-weight: bold; 
+            color: #000; 
+            border-top: 1px solid #eee; 
+            padding-top: 10px;
+        }
+
+        /* Imagem no Card (Opcional, se tiver foto aparece grande) */
+        .card-img-top {
+            width: 100%;
+            height: 180px;
+            object-fit: cover;
+            background: #f4f4f4;
+            display: none; /* Só mostra se tiver foto */
         }
 
         /* MODAL */
-        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; justify-content: center; align-items: center; }
-        .modal-body { background: white; width: 95%; max-width: 1000px; height: 85vh; border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; position: relative; }
-        
-        .modal-close { 
-            position: absolute; top: 10px; right: 15px; 
-            font-size: 30px; line-height: 1; cursor: pointer; 
-            background: #fff; border: none; font-weight: bold; color: #333; 
-            z-index: 20; padding: 5px; border-radius: 50%; width: 40px; height: 40px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        .modal-overlay { 
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(255,255,255,0.95); z-index: 9999; 
+            justify-content: center; align-items: center; 
         }
-        .modal-close:hover { background: #f0f0f0; color: red; }
+        .modal-body { 
+            background: white; 
+            width: 90%; max-width: 1100px; height: 85vh; 
+            border: 1px solid #ccc; 
+            display: flex; flex-direction: column; 
+            position: relative; 
+            box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+        }
+
+        /* BOTÃO FECHAR (X) */
+        .modal-close { 
+            position: absolute; top: 20px; right: 20px; 
+            font-size: 40px; line-height: 0.5; 
+            cursor: pointer; background: transparent; 
+            border: none; color: #000; z-index: 50; 
+            padding: 10px; width: auto; height: auto;
+        }
+        .modal-close:hover { color: #666; background: transparent; }
+
+        .modal-content-grid { 
+            display: grid; grid-template-columns: 45% 55%; flex-grow: 1; overflow: hidden; 
+        }
+        @media (max-width: 800px) { .modal-content-grid { grid-template-columns: 1fr; overflow-y: auto; } }
+
+        /* Coluna Esquerda: INFO */
+        .col-info { 
+            padding: 50px 40px; 
+            overflow-y: auto; 
+            background: #fff; 
+            display: flex; flex-direction: column; gap: 20px;
+        }
+
+        /* Título no Modal */
+        .modal-title-area { margin-bottom: 20px; padding-right: 40px; }
+        .modal-title { font-size: 2rem; font-weight: 900; text-transform: uppercase; line-height: 1; margin: 0 0 10px 0; }
         
-        .modal-header-area { padding: 30px 20px 15px 20px; background: #fafafa; border-bottom: 1px solid #eee; }
-        .modal-title { margin: 0; font-size: 1.8em; padding-right: 40px; }
-        .modal-code { font-weight: bold; color: #000; background: #FFC107; padding: 2px 8px; border-radius: 4px; font-size: 0.9em; display: inline-block; margin-top: 5px; }
+        /* Badges abaixo do título */
+        .modal-meta { display: flex; gap: 10px; }
+        .modal-badge-black { background: #000; color: #fff; padding: 5px 10px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
+        .modal-badge-outline { border: 1px solid #000; color: #000; padding: 5px 10px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
 
-        .modal-content-grid { display: grid; grid-template-columns: 55% 45%; flex-grow: 1; overflow: hidden; }
-        @media (max-width: 768px) { .modal-content-grid { grid-template-columns: 1fr; overflow-y: auto; } }
+        /* Imagem */
+        .modal-img-banner { width: 100%; height: 250px; object-fit: cover; margin-bottom: 10px; background: #eee; }
 
-        .col-info { padding: 20px; overflow-y: auto; background: #fff; }
-        .modal-img-banner { width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 20px; border: 1px solid #eee; }
-        
-        .detail-item { margin-bottom: 15px; border-bottom: 1px solid #f5f5f5; padding-bottom: 5px; }
-        .detail-label { font-weight: bold; color: #888; font-size: 0.75em; text-transform: uppercase; margin-bottom: 3px; }
-        .detail-value { font-size: 0.95em; color: #333; line-height: 1.4; }
+        /* Detalhes */
+        .detail-block { margin-bottom: 15px; }
+        .detail-label { font-size: 0.7rem; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
+        .detail-text { font-size: 1rem; color: #000; line-height: 1.5; }
+        .detail-text a { color: #000; text-decoration: underline; font-weight: bold; }
 
-        .col-map { position: relative; height: 100%; background: #eee; border-left: 1px solid #ddd; }
+        /* Coluna Direita: MAPA */
+        .col-map { position: relative; height: 100%; background: #eee; }
         .modal-map { width: 100%; height: 100%; }
 
-        .admin-link { display: block; text-align: right; margin-top: 20px; color: #aaa; text-decoration: none; }
-        .loader { display: none; text-align: center; margin: 10px 0; color: #007bff; font-weight: bold; }
-        .aviso-filtro { display:none; background: #fff3cd; color: #856404; padding: 10px; text-align: center; border-radius: 6px; margin-bottom: 15px; }
+        .admin-link { display: block; text-align: center; padding: 20px; color: #ccc; text-decoration: none; font-size: 0.8rem; text-transform: uppercase; }
+        .admin-link:hover { color: #000; }
     </style>
 </head>
 <body>
-    <h1>Encontre uma Loja Soul</h1>
-    <p class="subtitle">{{ qtd }} autorizadas cadastradas</p>
-    
+
+    <header>
+        <h1>Soul Cycles</h1>
+        <div class="subtitle">Localizador de Lojas Autorizadas</div>
+    </header>
+
+    <div id="aviso" class="aviso-filtro"></div>
+    <div id="loader" class="loader">Processando dados...</div>
+
     <div id="main-map"></div>
 
-    <div class="search-container">
-        <div class="input-group">
-            <input type="text" id="buscaInput" placeholder="Busque por Cidade, Estado ou Nome...">
-            <button onclick="buscarTexto()">🔍 Buscar</button>
-        </div>
-        <div class="input-group" style="max-width: 280px;">
-            <input type="text" id="cepInput" placeholder="Digite seu CEP">
-            <button class="btn-cep" onclick="buscarCep()">📍 Lojas até 100km</button>
+    <div class="search-section">
+        <div class="search-container">
+            <div class="input-group">
+                <input type="text" id="buscaInput" placeholder="BUSCAR POR NOME OU CIDADE">
+            </div>
+            <div class="input-group" style="flex-grow: 0;">
+                <input type="text" id="cepInput" placeholder="CEP (00000-000)">
+            </div>
+            <button onclick="buscarTexto()">BUSCAR LOJA</button>
+            <button class="btn-cep" onclick="buscarCep()">BUSCAR POR CEP</button>
         </div>
     </div>
     
-    <div id="aviso" class="aviso-filtro"></div>
-    <div id="loader" class="loader">Consultando CEP e calculando rotas...</div>
-    <div id="lista" class="grid"></div>
+    <div class="grid-container">
+        <p class="subtitle" style="text-align: left; margin-bottom: 20px;">{{ qtd }} RESULTADOS ENCONTRADOS</p>
+        <div id="lista" class="grid"></div>
+    </div>
     
-    <a href="/admin" class="admin-link">Area Administrativa</a>
+    <a href="/admin" class="admin-link">Login Administrativo</a>
 
     <div id="modalDetalhes" class="modal-overlay" onclick="fecharModal(event)">
         <div class="modal-body" onclick="event.stopPropagation()">
-            <button class="modal-close" onclick="fecharModal()">×</button>
             
-            <div class="modal-header-area">
-                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                    <div>
-                        <h2 class="modal-title" id="m_nome">Nome da Loja</h2>
-                        <div id="m_codigo_area"></div>
-                    </div>
-                    <span class="badge" id="m_perfil" style="font-size: 0.9em; margin-top: 5px;">PERFIL</span>
-                </div>
-                <div id="m_local" style="color:#666; margin-top:5px;">Cidade - UF</div>
-            </div>
+            <button class="modal-close" onclick="fecharModal()">×</button>
 
             <div class="modal-content-grid">
+                
                 <div class="col-info">
+                    
+                    <div class="modal-title-area">
+                        <h2 class="modal-title" id="m_nome">NOME DA LOJA</h2>
+                        <div class="modal-meta">
+                            <span class="modal-badge-black" id="m_perfil">PERFIL</span>
+                            <span class="modal-badge-outline" id="m_codigo_area">COD</span>
+                        </div>
+                    </div>
+
                     <img id="m_foto" class="modal-img-banner" src="" style="display:none;">
-                    <div class="detail-item"><div class="detail-label">Endereço</div><div class="detail-value" id="m_endereco"></div></div>
-                    <div class="detail-item"><div class="detail-label">Contatos</div><div class="detail-value" id="m_contato"></div></div>
-                    <div class="detail-item"><div class="detail-label">Horário de Atendimento</div><div class="detail-value" id="m_horario"></div></div>
-                    <div class="detail-item"><div class="detail-label">Informações Internas</div><div class="detail-value" id="m_interno"></div></div>
-                    <div class="detail-item" style="border:none;"><div class="detail-label">Ações Rápidas</div><div class="detail-value" id="m_links"></div></div>
+
+                    <div class="detail-block">
+                        <div class="detail-label">Localização</div>
+                        <div class="detail-text" id="m_endereco">Rua Exemplo, 123</div>
+                        <div class="detail-text" id="m_local">Cidade - UF</div>
+                    </div>
+
+                    <div class="detail-block">
+                        <div class="detail-label">Contato</div>
+                        <div class="detail-text" id="m_contato"></div>
+                    </div>
+
+                    <div class="detail-block">
+                        <div class="detail-label">Atendimento</div>
+                        <div class="detail-text" id="m_horario"></div>
+                    </div>
+
+                    <div class="detail-block">
+                        <div class="detail-label">Links Rápidos</div>
+                        <div class="detail-text" id="m_links"></div>
+                    </div>
+                    
+                    <div class="detail-block">
+                        <div class="detail-label">Info Interna</div>
+                        <div class="detail-text" id="m_interno" style="font-size: 0.85rem; color: #666;"></div>
+                    </div>
+
                 </div>
+
                 <div class="col-map">
                     <div id="modal-map" class="modal-map"></div>
                 </div>
@@ -165,8 +325,14 @@ HTML_PUBLICO = """
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
+        // Mapa em Preto e Branco (CartoDB Positron) para combinar com o tema
         var mainMap = L.map('main-map').setView([-14.2350, -51.9253], 4);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(mainMap);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            subdomains: 'abcd',
+            maxZoom: 20
+        }).addTo(mainMap);
+
         var markersLayer = L.layerGroup().addTo(mainMap);
         var radiusCircle = null;
         var modalMap = null;
@@ -182,10 +348,10 @@ HTML_PUBLICO = """
 
         async function buscarCep() {
             let cep = document.getElementById('cepInput').value.replace(/\D/g, '');
-            if (cep.length !== 8) { alert("Digite um CEP válido (8 números)"); return; }
+            if (cep.length !== 8) { alert("CEP inválido"); return; }
 
             document.getElementById('loader').style.display = 'block';
-            document.getElementById('lista').style.opacity = '0.5';
+            document.getElementById('lista').style.opacity = '0.3';
 
             try {
                 let res = await fetch('/api/lojas?cep=' + cep);
@@ -201,23 +367,22 @@ HTML_PUBLICO = """
                     
                     document.getElementById('aviso').style.display = 'block';
                     if (lojasFiltradas.length > 0) {
-                        document.getElementById('aviso').innerText = `Encontramos ${lojasFiltradas.length} lojas num raio de 100km de ${resposta.endereco_base}.`;
+                        document.getElementById('aviso').innerText = `ENCONTRADAS ${lojasFiltradas.length} LOJAS EM UM RAIO DE 100KM DE ${resposta.endereco_base}`;
                     } else {
-                        document.getElementById('aviso').innerText = `Nenhuma loja encontrada num raio de 100km de ${resposta.endereco_base}.`;
+                        document.getElementById('aviso').innerText = `NENHUMA LOJA PRÓXIMA A ${resposta.endereco_base}`;
                     }
 
                     if(centro) {
-                        mainMap.setView([centro[0], centro[1]], 9);
+                        mainMap.setView([centro[0], centro[1]], 8);
                         if(radiusCircle) mainMap.removeLayer(radiusCircle);
                         radiusCircle = L.circle([centro[0], centro[1]], {
-                            color: '#007bff', fillColor: '#007bff', fillOpacity: 0.1, radius: 100000
+                            color: '#000', fillColor: '#000', fillOpacity: 0.05, weight: 1, radius: 100000
                         }).addTo(mainMap);
                         mainMap.fitBounds(radiusCircle.getBounds());
                     }
                 }
             } catch (e) {
                 console.error(e);
-                alert("Erro ao buscar CEP.");
             } finally {
                 document.getElementById('loader').style.display = 'none';
                 document.getElementById('lista').style.opacity = '1';
@@ -237,39 +402,32 @@ HTML_PUBLICO = """
             });
         }
 
-        function pegarIniciais(nome) {
-            if(!nome) return "SL";
-            let partes = nome.trim().split(" ");
-            if (partes.length === 1) return partes[0].substring(0, 2).toUpperCase();
-            return (partes[0][0] + partes[1][0]).toUpperCase();
-        }
-
         function renderizar(lojas) {
             markersLayer.clearLayers();
             let html = '';
-            if (!lojas || lojas.length === 0) html = '<p style="text-align:center; grid-column:1/-1;">Nenhuma loja encontrada.</p>';
+            if (!lojas || lojas.length === 0) html = '<p style="text-align:center; grid-column:1/-1; color:#999;">Nenhuma loja encontrada.</p>';
             else {
                 lojas.forEach(l => {
+                    // Ícone preto no mapa
                     if(l.lat && l.lon) {
                         let m = L.marker([l.lat, l.lon]).bindPopup(`<b>${l.nome}</b>`);
                         m.on('click', () => abrirModal(l));
                         markersLayer.addLayer(m);
                     }
-                    let imagemHtml = l.foto ? 
-                        `<img src="/static/uploads/${l.foto}" class="card-img">` : 
-                        `<div class="card-initials">${pegarIniciais(l.nome)}</div>`;
-                    let distHtml = l.distancia ? 
-                        `<div class="distancia-badge">📍 A ${l.distancia} km de você</div>` : '';
+
+                    // Se tiver foto, mostra ela no topo do card
+                    let imgHtml = l.foto ? `<img src="/static/uploads/${l.foto}" class="card-img-top" style="display:block;">` : '';
+                    let distHtml = l.distancia ? `<div class="distancia-badge">${l.distancia} KM DA SUA LOCALIZAÇÃO</div>` : '';
 
                     html += `
                     <div class="card" onclick='abrirModal(${JSON.stringify(l)})'>
-                        <div class="card-img-box">${imagemHtml}</div>
-                        <div class="card-content">
+                        ${imgHtml}
+                        <div class="card-body">
                             <div class="card-header">
                                 <h3>${l.nome}</h3>
-                                <span class="badge">${l.perfil || 'Loja'}</span>
+                                <span class="badge">${l.perfil || 'LOJA'}</span>
                             </div>
-                            <div class="info-row">📍 ${l.municipio} - ${l.uf}</div>
+                            <div class="info-row">${l.municipio} - ${l.uf}</div>
                             ${distHtml}
                         </div>
                     </div>`;
@@ -282,14 +440,17 @@ HTML_PUBLICO = """
             document.getElementById('m_nome').innerText = l.nome;
             document.getElementById('m_perfil').innerText = l.perfil;
             document.getElementById('m_local').innerText = `${l.municipio} - ${l.uf}`;
-            let codigoHtml = l.codigo ? `<span class="modal-code">CÓD: ${l.codigo}</span>` : '';
-            document.getElementById('m_codigo_area').innerHTML = codigoHtml;
-            document.getElementById('m_endereco').innerText = `${l.endereco}, ${l.numero} - ${l.bairro || ''} (CEP: ${l.cep || ''})`;
+            
+            // Código e Perfil (Labels)
+            document.getElementById('m_codigo_area').style.display = l.codigo ? 'inline-block' : 'none';
+            if(l.codigo) document.getElementById('m_codigo_area').innerText = `COD: ${l.codigo}`;
+
+            document.getElementById('m_endereco').innerText = `${l.endereco}, ${l.numero} - ${l.bairro || ''}`;
             
             let contatoHtml = "";
-            if(l.telefone) contatoHtml += `Tel: ${l.telefone}<br>`;
-            if(l.email) contatoHtml += `Email: ${l.email}<br>`;
-            if(l.contato) contatoHtml += `Responsável: ${l.contato}`;
+            if(l.telefone) contatoHtml += `${l.telefone}<br>`;
+            if(l.email) contatoHtml += `${l.email}<br>`;
+            if(l.contato) contatoHtml += `Resp: ${l.contato}`;
             document.getElementById('m_contato').innerHTML = contatoHtml || "-";
 
             let horaHtml = "";
@@ -300,8 +461,8 @@ HTML_PUBLICO = """
             document.getElementById('m_interno').innerText = `Vendedor: ${l.vendedor || '-'} | Time: ${l.time_soul || '-'}`;
 
             let linksHtml = "";
-            if(l.telefone) linksHtml += `<a href="https://wa.me/55${l.telefone.replace(/\D/g,'')}" target="_blank" style="color:green; font-weight:bold; margin-right:15px; text-decoration:none;">📲 WhatsApp</a>`;
-            if(l.instagram) linksHtml += `<a href="https://instagram.com/${l.instagram.replace('@','').replace('/','')}" target="_blank" style="color:#E1306C; font-weight:bold; text-decoration:none;">📸 Instagram</a>`;
+            if(l.telefone) linksHtml += `<a href="https://wa.me/55${l.telefone.replace(/\D/g,'')}" target="_blank">WHATSAPP</a> &nbsp;&nbsp; `;
+            if(l.instagram) linksHtml += `<a href="https://instagram.com/${l.instagram.replace('@','').replace('/','')}" target="_blank">INSTAGRAM</a>`;
             document.getElementById('m_links').innerHTML = linksHtml;
 
             let img = document.getElementById('m_foto');
@@ -310,15 +471,25 @@ HTML_PUBLICO = """
 
             document.getElementById('modalDetalhes').style.display = 'flex';
 
+            // Mapa do Modal
             setTimeout(() => {
                 if (!modalMap) {
                     modalMap = L.map('modal-map');
-                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(modalMap);
+                    // Também usando mapa PB no modal
+                    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                        subdomains: 'abcd', maxZoom: 20
+                    }).addTo(modalMap);
                 }
                 if (l.lat && l.lon) {
                     modalMap.setView([l.lat, l.lon], 15);
                     modalMap.eachLayer((layer) => { if (layer instanceof L.Marker) modalMap.removeLayer(layer); });
-                    L.marker([l.lat, l.lon]).addTo(modalMap);
+                    // Marcador preto
+                    var blackIcon = new L.Icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/markers/marker-icon-2x-black.png',
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                        iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+                    });
+                    L.marker([l.lat, l.lon], {icon: blackIcon}).addTo(modalMap);
                     modalMap.invalidateSize();
                 } else {
                     modalMap.setView([-14.23, -51.92], 4);
@@ -341,62 +512,72 @@ HTML_PUBLICO = """
 </html>
 """
 
-# --- HTML ADMIN (Mantido igual) ---
+# --- HTML ADMIN (ESTILO SIMPLIFICADO) ---
 HTML_ADMIN = """
 <!DOCTYPE html>
 <html>
 <head>
     <title>Admin - Soul Cycles</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; max-width: 1100px; margin: 0 auto; padding: 20px; background: #eee; }
-        .container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        h2 { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 10px; }
-        .btn { padding: 8px 15px; border: none; cursor: pointer; border-radius: 4px; font-weight: bold; text-decoration: none; color: white; background: #000; }
+        body { font-family: 'Segoe UI', sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #eee; }
+        .container { background: white; padding: 40px; border: 1px solid #ccc; }
+        h2 { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 15px; margin-top:0; text-transform: uppercase; }
+        
+        .btn { padding: 10px 20px; border: none; cursor: pointer; font-weight: bold; text-decoration: none; color: white; background: #000; text-transform: uppercase; font-size: 0.8rem; }
+        .btn:hover { background: #333; }
         .btn-danger { background: #dc3545; }
         .btn-warning { background: #ffc107; color: #000; }
-        .btn-info { background: #17a2b8; }
-        #form-container { display: none; background: #f9f9f9; padding: 20px; border: 1px solid #ddd; margin-bottom: 20px; border-radius: 8px; }
-        .form-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+        
+        input, select { padding: 10px; width: 100%; border: 1px solid #ccc; box-sizing: border-box; margin-bottom: 5px; }
+        label { font-size: 0.7rem; font-weight: bold; color: #666; text-transform: uppercase; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 0.9rem; }
+        th { background: #000; color: #fff; text-align: left; padding: 10px; text-transform: uppercase; font-size: 0.8rem; }
+        td { padding: 10px; border-bottom: 1px solid #eee; }
+        tr:hover { background: #f9f9f9; }
+
+        /* Modal Admin */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 999; overflow-y: auto; }
+        .modal-content { background: white; width: 90%; max-width: 800px; margin: 50px auto; padding: 30px; }
+        .form-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
         .col-1 { grid-column: span 1; } .col-2 { grid-column: span 2; } .col-4 { grid-column: span 4; }
-        input, select { padding: 8px; width: 100%; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-        label { font-size: 0.8em; font-weight: bold; color: #555; }
-        .section-title { grid-column: span 4; margin-top: 10px; border-bottom: 1px solid #ccc; font-weight: bold; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.85em; }
-        th, td { padding: 8px; border-bottom: 1px solid #ddd; text-align: left; }
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; overflow-y: auto; }
-        .modal-content { background: white; width: 95%; max-width: 800px; margin: 30px auto; padding: 20px; border-radius: 8px; }
+        .section-title { grid-column: span 4; margin-top: 20px; border-bottom: 1px solid #eee; font-weight: bold; text-transform: uppercase; }
     </style>
 </head>
 <body>
     <div class="container">
-        <a href="/" style="color:#666; text-decoration:none;">← Voltar ao Site</a>
-        {% if msg %} <div style="background:#d4edda; color:#155724; padding:10px; margin:10px 0; text-align:center;">{{ msg }}</div> {% endif %}
-        <h2>Gerenciar Lojas <button onclick="toggleForm()" class="btn">➕ Nova Loja</button></h2>
-        <div id="form-container">
-            <h3>Nova Loja</h3>
+        <a href="/" style="color:#666; text-decoration:none; font-size:0.8rem; text-transform:uppercase;">← Voltar ao Site</a>
+        {% if msg %} <div style="background:#000; color:#fff; padding:10px; margin:10px 0; text-align:center;">{{ msg }}</div> {% endif %}
+        
+        <h2>Gerenciar Lojas <button onclick="toggleForm()" class="btn">Nova Loja</button></h2>
+
+        <div id="form-container" style="display:none; background:#f9f9f9; padding:20px; border:1px solid #ddd; margin-bottom:20px;">
             <form action="/admin/add" method="POST" enctype="multipart/form-data" class="form-grid">
-                <div class="section-title">Dados & Foto</div>
+                <div class="section-title">Dados</div>
                 <div class="col-2"><label>Nome</label><input type="text" name="nome" required></div>
-                <div class="col-1"><label>Perfil</label>
-                    <select name="perfil"><option>Loja</option><option>Mecânico</option><option>Revenda</option></select>
-                </div>
+                <div class="col-1"><label>Perfil</label><select name="perfil"><option>Loja</option><option>Mecânico</option><option>Revenda</option></select></div>
                 <div class="col-1"><label>Código</label><input type="text" name="codigo"></div>
-                <div class="col-4"><label>📸 Foto da Loja</label><input type="file" name="foto" accept="image/*"></div>
-                <div class="section-title">Localização</div>
+                <div class="col-4"><label>Foto</label><input type="file" name="foto" accept="image/*"></div>
+                
+                <div class="section-title">Endereço</div>
                 <div class="col-2"><label>Rua</label><input type="text" name="endereco" required></div>
-                <div class="col-1"><label>Número</label><input type="text" name="numero" required></div>
+                <div class="col-1"><label>Nº</label><input type="text" name="numero" required></div>
                 <div class="col-1"><label>Bairro</label><input type="text" name="bairro"></div>
                 <div class="col-2"><label>Cidade</label><input type="text" name="municipio" required></div>
                 <div class="col-1"><label>UF</label><input type="text" name="uf" required></div>
                 <div class="col-1"><label>CEP</label><input type="text" name="cep"></div>
+                
                 <div class="section-title">Extras</div>
                 <div class="col-2"><label>Telefone</label><input type="text" name="telefone"></div>
                 <div class="col-2"><label>Vendedor</label><input type="text" name="vendedor"></div>
-                <input type="hidden" name="cnpj" value=""><input type="hidden" name="contato_nome" value="">
-                <div class="col-4" style="margin-top:10px"><button class="btn" style="width:100%">Salvar</button></div>
+                <input type="hidden" name="cnpj"><input type="hidden" name="contato_nome">
+                
+                <div class="col-4" style="margin-top:10px"><button class="btn" style="width:100%">Salvar Cadastro</button></div>
             </form>
         </div>
-        <input type="text" id="busca" onkeyup="filtrar()" placeholder="🔍 Pesquisar..." style="width:100%; padding:10px; margin-bottom:10px;">
+
+        <input type="text" id="busca" onkeyup="filtrar()" placeholder="PESQUISAR..." style="padding:15px; border:2px solid #000; margin-bottom:20px;">
+
         <table id="tabela">
             <thead><tr><th>Cód</th><th>Loja</th><th>Local</th><th>Foto</th><th>Ações</th></tr></thead>
             <tbody>
@@ -405,20 +586,21 @@ HTML_ADMIN = """
                     <td>{{ loja['codigo'] }}</td>
                     <td><b>{{ loja['nome'] }}</b><br><small>{{ loja['perfil'] }}</small></td>
                     <td>{{ loja['municipio'] }}-{{ loja['uf'] }}</td>
-                    <td>{% if loja['foto'] %}✅{% else %}❌{% endif %}</td>
+                    <td>{% if loja['foto'] %}SIM{% else %}NÃO{% endif %}</td>
                     <td>
-                        <button onclick='editar({{ loja | tojson }})' class="btn btn-warning">✏️</button>
-                        <a href="/admin/delete/{{ loja['id'] }}" onclick="return confirm('Apagar?')" class="btn btn-danger">🗑️</a>
-                        {% if not loja['lat'] %} <a href="/admin/geo/{{ loja['id'] }}" class="btn btn-info">🌍</a> {% endif %}
+                        <button onclick='editar({{ loja | tojson }})' class="btn btn-warning">EDITAR</button>
+                        <a href="/admin/delete/{{ loja['id'] }}" onclick="return confirm('Apagar?')" class="btn btn-danger">X</a>
+                        {% if not loja['lat'] %} <a href="/admin/geo/{{ loja['id'] }}" class="btn">GPS</a> {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
+
     <div id="modalEdit" class="modal">
         <div class="modal-content">
-            <h3>Editar <button onclick="fechar()" class="btn btn-danger" style="float:right">X</button></h3>
+            <h3 style="text-transform:uppercase;">Editar <button onclick="fechar()" class="btn btn-danger" style="float:right">X</button></h3>
             <form action="/admin/update" method="POST" enctype="multipart/form-data" class="form-grid">
                 <input type="hidden" name="id" id="e_id">
                 <div class="col-2"><label>Código</label><input type="text" name="codigo" id="e_codigo"></div>
@@ -447,9 +629,7 @@ HTML_ADMIN = """
             document.getElementById('modalEdit').style.display = 'block';
             ['id','nome','endereco','numero','bairro','municipio','uf','telefone','vendedor',
              'perfil','codigo','cnpj','contato_nome','cep','email','instagram','horario_seg_sex','horario_sab','time_soul']
-             .forEach(field => {
-                 if(document.getElementById('e_'+field)) document.getElementById('e_'+field).value = l[field] || '';
-             });
+             .forEach(field => { if(document.getElementById('e_'+field)) document.getElementById('e_'+field).value = l[field] || ''; });
         }
         function filtrar() {
             let termo = document.getElementById('busca').value.toLowerCase();
@@ -461,7 +641,7 @@ HTML_ADMIN = """
 </html>
 """
 
-# --- BACKEND ---
+# --- BACKEND (Python) ---
 def get_db():
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
@@ -535,27 +715,24 @@ def api_lojas():
 
     if cep_busca:
         try:
-            # ETAPA 1: TRADUZIR O CEP PARA ENDEREÇO (ViaCEP)
+            # Consulta ViaCEP (Segura)
             url_viacep = f"https://viacep.com.br/ws/{cep_busca}/json/"
             req = urllib.request.Request(url_viacep, headers={'User-Agent': 'SoulApp/1.0'})
             
             with urllib.request.urlopen(req) as response:
                 dados_cep = json.loads(response.read().decode())
                 
-                if 'erro' in dados_cep:
-                    return jsonify({'erro': 'CEP não encontrado no Brasil.'})
+                if 'erro' in dados_cep: return jsonify({'erro': 'CEP não encontrado.'})
                 
-                # ETAPA 2: ACHAR COORDENADAS DO ENDEREÇO
-                # Criamos uma string de busca segura: "Logradouro, Cidade - UF, Brazil"
+                # Busca Lat/Lon do endereço do CEP no Brasil
                 texto_busca = f"{dados_cep['logradouro']}, {dados_cep['localidade']} - {dados_cep['uf']}, Brazil"
-                
-                geolocator = Nominatim(user_agent="soul_app_v7")
+                geolocator = Nominatim(user_agent="soul_app_v8")
                 location = geolocator.geocode(texto_busca)
                 
                 if not location:
-                    # Se falhar a rua, tenta só a cidade
-                    texto_busca_cidade = f"{dados_cep['localidade']} - {dados_cep['uf']}, Brazil"
-                    location = geolocator.geocode(texto_busca_cidade)
+                     # Fallback para cidade
+                     texto_busca = f"{dados_cep['localidade']} - {dados_cep['uf']}, Brazil"
+                     location = geolocator.geocode(texto_busca)
 
                 if location:
                     user_coords = (location.latitude, location.longitude)
@@ -576,11 +753,9 @@ def api_lojas():
                         'endereco_base': f"{dados_cep['localidade']} - {dados_cep['uf']}",
                         'lojas': lojas_proximas
                     })
-                else:
-                    return jsonify({'erro': 'Não conseguimos localizar este endereço no mapa.'})
+                else: return jsonify({'erro': 'Localização não encontrada no mapa.'})
 
         except Exception as e:
-            print(f"Erro CEP: {e}")
             return jsonify({'erro': 'Erro ao consultar CEP.'})
 
     return jsonify({'lojas': lista})
@@ -616,7 +791,7 @@ def add_loja():
     ))
     conn.commit()
     conn.close()
-    return redirect(url_for('admin', msg="Loja adicionada com foto!"))
+    return redirect(url_for('admin', msg="Loja adicionada!"))
 
 @app.route('/admin/update', methods=['POST'])
 def update_loja():
