@@ -1,207 +1,305 @@
-from flask import Flask, jsonify, request, render_template_string
+from flask import Flask, jsonify, request, render_template_string, redirect, url_for
+import sqlite3
 import csv
 import os
+from geopy.geocoders import Nominatim
 from unicodedata import normalize
 
 app = Flask(__name__)
 
-# --- CONFIGURAÇÃO DO HTML ---
-HTML_TEMPLATE = """
+# Configuração do Banco de Dados
+DB_NAME = "lojas.db"
+
+# HTML DO SITE (PÚBLICO)
+HTML_PUBLICO = """
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rede Autorizada Soul</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background-color: #f4f6f8; color: #333; }
-        h1 { text-align: center; color: #111; margin-bottom: 5px; }
-        .subtitle { text-align: center; color: #666; margin-bottom: 30px; }
-        .search-container { display: flex; gap: 10px; justify-content: center; margin-bottom: 30px; }
-        input { padding: 12px 15px; width: 60%; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; outline: none; }
-        button { padding: 12px 25px; cursor: pointer; background: #000; color: #fff; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; }
-        button:hover { background: #444; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; }
-        .card { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); border-left: 5px solid #000; }
-        .card h3 { margin: 0 0 10px 0; font-size: 1.2rem; color: #000; }
-        .badge { background: #eee; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; color: #555; text-transform: uppercase; float: right; }
-        .info-group { margin-bottom: 12px; font-size: 0.95rem; line-height: 1.5; }
-        .info-group strong { display: block; font-size: 0.8rem; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
-        .contact-links { margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap; }
-        .btn-link { text-decoration: none; background: #f0f0f0; color: #333; padding: 6px 12px; border-radius: 4px; font-size: 0.85rem; font-weight: 600; }
-        .btn-link.whatsapp { background: #25D366; color: #fff; }
-        .btn-link.insta { background: #E1306C; color: #fff; }
-        .error { text-align: center; padding: 20px; background: #fff; border-radius: 8px; color: #d9534f; grid-column: 1/-1; }
-        .loading { text-align: center; color: #666; font-style: italic; grid-column: 1/-1; }
+        body { font-family: 'Segoe UI', sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; background: #f4f6f8; }
+        h1, .subtitle { text-align: center; }
+        #map { height: 400px; width: 100%; border-radius: 12px; margin-bottom: 20px; border: 2px solid #ddd; z-index: 1; }
+        .search-box { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
+        input { padding: 12px; width: 60%; border: 1px solid #ccc; border-radius: 6px; }
+        button { padding: 12px 25px; cursor: pointer; background: #000; color: #fff; border: none; border-radius: 6px; font-weight: bold; }
+        .admin-link { display: block; text-align: right; margin-top: 20px; color: #aaa; text-decoration: none; font-size: 0.8em; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+        .card { background: #fff; padding: 20px; border-radius: 10px; border-left: 5px solid #000; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .badge { float: right; background: #eee; padding: 2px 8px; font-size: 0.8em; font-weight: bold; border-radius: 4px; }
+        .contact-links { margin-top: 10px; display: flex; gap: 5px; }
+        .btn-link { padding: 5px 10px; background: #eee; text-decoration: none; color: #333; border-radius: 4px; font-size: 0.85em; }
+        .btn-link.whatsapp { background: #25D366; color: white; }
     </style>
 </head>
 <body>
     <h1>Encontre uma Loja Soul</h1>
     <p class="subtitle">{{ qtd }} autorizadas cadastradas</p>
     
-    <div class="search-container">
-        <input type="text" id="cidadeInput" placeholder="Digite Cidade ou Estado (ex: Itajaí, SP)...">
-        <button onclick="buscar()">Buscar</button>
+    <div id="map"></div>
+
+    <div class="search-box">
+        <input type="text" id="buscaInput" placeholder="Busque por cidade, estado ou nome...">
+        <button onclick="buscar()">Filtrar</button>
     </div>
     
-    <div id="resultado" class="grid"></div>
+    <div id="lista" class="grid"></div>
+    
+    <a href="/admin" class="admin-link">Area Administrativa</a>
 
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        document.getElementById("cidadeInput").addEventListener("keypress", function(event) {
-            if (event.key === "Enter") { buscar(); }
-        });
+        var map = L.map('map').setView([-14.2350, -51.9253], 4);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+        var markersLayer = L.layerGroup().addTo(map);
+        var allData = [];
 
-        async function buscar() {
-            let termo = document.getElementById('cidadeInput').value;
-            let btn = document.querySelector('button');
-            let divRes = document.getElementById('resultado');
-            
-            if (!termo) { alert("Digite algo para buscar!"); return; }
-
-            btn.innerText = 'Buscando...';
-            btn.disabled = true;
-            divRes.innerHTML = '<p class="loading">Carregando dados...</p>';
-            
-            try {
-                let response = await fetch('/lojas?busca=' + termo);
-                let dados = await response.json();
-                
-                let html = '';
-                if(dados.length === 0) {
-                    divRes.classList.remove('grid');
-                    html = '<div class="error">Nenhuma loja encontrada para "'+termo+'".<br>Tente digitar apenas o nome da cidade ou a sigla do estado.</div>';
-                } else {
-                    divRes.classList.add('grid');
-                    dados.forEach(item => {
-                        let nome = item.nome || 'Loja Autorizada';
-                        let perfil = item.perfil || 'Autorizada';
-                        let cidade = item.municipio || '';
-                        let uf = item.uf || '';
-                        let endereco = item.endereço || '';
-                        let num = item['numero/complemento'] || '';
-                        let bairro = item.bairro || '';
-                        let cep = item.cep || '';
-                        let tel = item.telefone || '';
-                        let contato = item.contato || '';
-                        let email = item['e-mail'] || '';
-                        let insta = item.instagram || '';
-                        let sem = item['seg._a_sex.'] || '';
-                        let sab = item['sábado'] || '';
-
-                        html += `
-                        <div class="card">
-                            <span class="badge">${perfil}</span>
-                            <h3>${nome}</h3>
-                            
-                            <div class="info-group">
-                                <strong>Localização</strong>
-                                ${cidade} - ${uf}<br>
-                                ${endereco}, ${num}<br>
-                                ${bairro} - CEP: ${cep}
-                            </div>
-                            
-                            <div class="info-group">
-                                <strong>Contato</strong>
-                                ${contato ? `Falar com: ${contato}<br>` : ''}
-                                ${tel} <br>
-                                <span style="font-size: 0.85em; color: #666;">${email}</span>
-                            </div>
-
-                            ${ (sem || sab) ? `
-                            <div class="info-group">
-                                <strong>Horário</strong>
-                                ${sem ? `Seg-Sex: ${sem}<br>` : ''}
-                                ${sab ? `Sáb: ${sab}` : ''}
-                            </div>` : ''}
-
-                            <div class="contact-links">
-                                ${tel ? `<a href="tel:${tel.replace(/[^0-9]/g, '')}" class="btn-link">Ligar</a>` : ''}
-                                ${tel ? `<a href="https://wa.me/55${tel.replace(/[^0-9]/g, '')}" target="_blank" class="btn-link whatsapp">WhatsApp</a>` : ''}
-                                ${insta ? `<a href="https://instagram.com/${insta.replace('@','').replace('/','')}" target="_blank" class="btn-link insta">Instagram</a>` : ''}
-                            </div>
-                        </div>`;
-                    });
-                }
-                divRes.innerHTML = html;
-            } catch (error) {
-                console.error(error);
-                divRes.innerHTML = '<p class="error">Ocorreu um erro ao buscar.</p>';
-            } finally {
-                btn.innerText = 'Buscar';
-                btn.disabled = false;
-            }
+        async function carregar() {
+            let res = await fetch('/api/lojas');
+            allData = await res.json();
+            renderizar(allData);
         }
+
+        function renderizar(lojas) {
+            markersLayer.clearLayers();
+            let html = '';
+            lojas.forEach(l => {
+                // Adiciona no mapa se tiver lat/lon
+                if(l.lat && l.lon) {
+                    let m = L.marker([l.lat, l.lon]).bindPopup(`<b>${l.nome}</b><br>${l.municipio}-${l.uf}`);
+                    markersLayer.addLayer(m);
+                }
+                // Adiciona na lista
+                html += `
+                <div class="card">
+                    <span class="badge">${l.perfil}</span>
+                    <h3>${l.nome}</h3>
+                    <p>${l.municipio} - ${l.uf}</p>
+                    <p style="font-size:0.9em; color:#666;">${l.endereco}, ${l.numero}</p>
+                    <div class="contact-links">
+                        ${l.telefone ? `<a href="https://wa.me/55${l.telefone.replace(/\D/g,'')}" class="btn-link whatsapp" target="_blank">WhatsApp</a>` : ''}
+                    </div>
+                </div>`;
+            });
+            document.getElementById('lista').innerHTML = html;
+        }
+
+        function buscar() {
+            let termo = document.getElementById('buscaInput').value.toLowerCase();
+            let filtrados = allData.filter(l => 
+                (l.nome + ' ' + l.municipio + ' ' + l.uf).toLowerCase().includes(termo)
+            );
+            renderizar(filtrados);
+        }
+        
+        carregar();
     </script>
 </body>
 </html>
 """
 
-# --- BACKEND (SERVIDOR PYTHON) ---
-
-def remover_acentos(txt):
-    if not txt: return ""
-    # Esta função remove acentos para facilitar a busca
-    return normalize('NFKD', str(txt)).encode('ASCII', 'ignore').decode('ASCII').lower()
-
-def carregar_dados():
-    lojas = []
-    caminho = 'dados.csv'
-    
-    if not os.path.exists(caminho):
-        return []
-
-    try:
-        try:
-            arquivo = open(caminho, mode='r', encoding='utf-8-sig')
-        except:
-            arquivo = open(caminho, mode='r', encoding='latin-1')
-
-        with arquivo as f:
-            conteudo = f.read(2048)
-            f.seek(0)
-            delimitador = ';' if conteudo.count(';') > conteudo.count(',') else ','
-            
-            reader = csv.DictReader(f, delimiter=delimitador)
-            
-            for row in reader:
-                item_limpo = {}
-                for k, v in row.items():
-                    if k:
-                        chave = str(k).strip().lower().replace(' ', '_')
-                        valor = str(v).strip() if v else ""
-                        item_limpo[chave] = valor
-                lojas.append(item_limpo)
-                
-    except Exception as e:
-        print(f"Erro ao ler CSV: {e}")
+# HTML DO ADMIN (PRIVADO)
+HTML_ADMIN = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin - Lojas Soul</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #eee; }
+        .container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h2 { border-bottom: 2px solid #000; padding-bottom: 10px; }
+        form { display: grid; gap: 10px; margin-bottom: 30px; background: #f9f9f9; padding: 15px; border-radius: 8px; }
+        input, select { padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+        button { padding: 10px; background: #000; color: white; border: none; cursor: pointer; border-radius: 4px; font-weight: bold; }
+        button:hover { background: #333; }
+        .msg { padding: 10px; background: #d4edda; color: #155724; border-radius: 4px; margin-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+        .btn-del { background: #dc3545; padding: 5px 10px; font-size: 0.8em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/">Voltar para o Site</a>
+        <h2>Gerenciar Lojas</h2>
         
-    return lojas
+        {% if msg %} <div class="msg">{{ msg }}</div> {% endif %}
+
+        <h3>Adicionar Nova Loja</h3>
+        <p style="font-size: 0.9em; color: #666;">O sistema buscará a latitude/longitude automaticamente pelo endereço.</p>
+        
+        <form action="/admin/add" method="POST">
+            <input type="text" name="nome" placeholder="Nome da Loja" required>
+            <select name="perfil">
+                <option value="Loja">Loja</option>
+                <option value="Mecânico">Mecânico</option>
+            </select>
+            <input type="text" name="endereco" placeholder="Endereço (Rua)" required>
+            <input type="text" name="numero" placeholder="Número" required>
+            <input type="text" name="bairro" placeholder="Bairro">
+            <input type="text" name="municipio" placeholder="Cidade" required>
+            <input type="text" name="uf" placeholder="Estado (UF)" required maxlength="2">
+            <input type="text" name="telefone" placeholder="Telefone/WhatsApp">
+            <button type="submit">Cadastrar Loja</button>
+        </form>
+
+        <h3>Lojas Cadastradas ({{ total }})</h3>
+        <table>
+            <thead><tr><th>Nome</th><th>Cidade</th><th>Lat/Lon</th><th>Ação</th></tr></thead>
+            <tbody>
+                {% for loja in lojas %}
+                <tr>
+                    <td>{{ loja['nome'] }}</td>
+                    <td>{{ loja['municipio'] }}-{{ loja['uf'] }}</td>
+                    <td>
+                        {% if loja['lat'] %} <span style="color:green">✔ OK</span>
+                        {% else %} <span style="color:red">✖ Pendente</span> {% endif %}
+                    </td>
+                    <td>
+                        <a href="/admin/delete/{{ loja['id'] }}" onclick="return confirm('Tem certeza?')" style="color:red">Excluir</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
+"""
+
+# --- FUNÇÕES DO SISTEMA ---
+
+def get_db():
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    # Cria a tabela se não existir
+    conn = get_db()
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS lojas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT, perfil TEXT, endereco TEXT, numero TEXT, bairro TEXT,
+            municipio TEXT, uf TEXT, cep TEXT, telefone TEXT, 
+            lat REAL, lon REAL
+        )
+    ''')
+    
+    # Se estiver vazia, tenta importar do CSV antigo
+    count = conn.execute('SELECT count(*) FROM lojas').fetchone()[0]
+    if count == 0 and os.path.exists('dados.csv'):
+        print("Importando dados do CSV inicial...")
+        try:
+            with open('dados.csv', mode='r', encoding='utf-8-sig') as f:
+                reader = csv.DictReader(f, delimiter=';') # Tenta ; primeiro
+                if 'NOME' not in reader.fieldnames: # Se falhar, tenta ,
+                    f.seek(0)
+                    reader = csv.DictReader(f, delimiter=',')
+                
+                for row in reader:
+                    # Mapeia colunas do CSV para o Banco
+                    # Ajuste as chaves conforme seu CSV exato
+                    nome = row.get('NOME') or row.get('nome')
+                    if not nome: continue
+                    
+                    conn.execute('''
+                        INSERT INTO lojas (nome, perfil, endereco, numero, bairro, municipio, uf, telefone)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        nome,
+                        row.get('PERFIL') or row.get('perfil'),
+                        row.get('ENDEREÇO') or row.get('endereço'),
+                        row.get('NUMERO/COMPLEMENTO') or row.get('numero'),
+                        row.get('BAIRRO') or row.get('bairro'),
+                        row.get('MUNICIPIO') or row.get('municipio'),
+                        row.get('UF') or row.get('uf'),
+                        row.get('TELEFONE') or row.get('telefone')
+                    ))
+        except Exception as e:
+            print(f"Erro na importação: {e}")
+    
+    conn.commit()
+    conn.close()
+
+# Roda a inicialização ao ligar o app
+init_db()
+
+# --- GEOLOCALIZAÇÃO ---
+def geocode_address(address_str):
+    try:
+        geolocator = Nominatim(user_agent="soul_app_finder_v1")
+        location = geolocator.geocode(address_str, timeout=10)
+        if location:
+            return location.latitude, location.longitude
+    except:
+        pass
+    return None, None
+
+# --- ROTAS ---
 
 @app.route('/')
 def home():
-    dados = carregar_dados()
-    return render_template_string(HTML_TEMPLATE, qtd=len(dados))
+    conn = get_db()
+    qtd = conn.execute('SELECT count(*) FROM lojas').fetchone()[0]
+    conn.close()
+    return render_template_string(HTML_PUBLICO, qtd=qtd)
 
-@app.route('/lojas')
-def get_lojas():
-    termo = request.args.get('busca', '').strip()
-    todas = carregar_dados()
+@app.route('/api/lojas')
+def api_lojas():
+    conn = get_db()
+    lojas = conn.execute('SELECT * FROM lojas').fetchall()
+    conn.close()
+    return jsonify([dict(ix) for ix in lojas])
+
+@app.route('/admin')
+def admin():
+    conn = get_db()
+    lojas = conn.execute('SELECT * FROM lojas ORDER BY id DESC').fetchall()
+    conn.close()
+    return render_template_string(HTML_ADMIN, lojas=lojas, total=len(lojas))
+
+@app.route('/admin/add', methods=['POST'])
+def add_loja():
+    nome = request.form['nome']
+    municipio = request.form['municipio']
+    uf = request.form['uf']
+    endereco = request.form['endereco']
+    numero = request.form['numero']
     
-    if not termo:
-        return jsonify(todas)
+    # Monta endereço para o Google Maps/Nominatim achar
+    full_address = f"{endereco}, {numero} - {municipio}, {uf}, Brazil"
+    print(f"Buscando coordenadas para: {full_address}")
     
-    termo_limpo = remover_acentos(termo)
+    # Busca Lat/Lon automaticamente
+    lat, lon = geocode_address(full_address)
     
-    resultado = []
-    for loja in todas:
-        mun = remover_acentos(loja.get('municipio', ''))
-        uf = remover_acentos(loja.get('uf', ''))
-        nome = remover_acentos(loja.get('nome', ''))
-        
-        if (termo_limpo in mun) or (termo_limpo == uf) or (termo_limpo in nome):
-            resultado.append(loja)
-            
-    return jsonify(resultado)
+    conn = get_db()
+    conn.execute('''
+        INSERT INTO lojas (nome, perfil, endereco, numero, bairro, municipio, uf, telefone, lat, lon)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        nome, request.form['perfil'], endereco, numero, request.form['bairro'],
+        municipio, uf, request.form['telefone'], lat, lon
+    ))
+    conn.commit()
+    conn.close()
+    
+    msg = "Loja cadastrada com sucesso!"
+    if not lat: msg += " (Mas não conseguimos achar a localização no mapa)"
+    
+    return render_template_string(HTML_ADMIN, msg=msg, lojas=get_db().execute('SELECT * FROM lojas ORDER BY id DESC').fetchall())
+
+@app.route('/admin/delete/<int:id>')
+def delete_loja(id):
+    conn = get_db()
+    conn.execute('DELETE FROM lojas WHERE id = ?', (id,))
+    conn.commit()
+    conn.close()
+    return redirect('/admin')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
