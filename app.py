@@ -22,7 +22,7 @@ if not os.path.exists(UPLOAD_FOLDER):
 
 DB_NAME = "lojas.db"
 
-# --- HTML PÚBLICO (MANTIDO) ---
+# --- HTML PÚBLICO (BUSCA ÚNICA + DESIGN TREK) ---
 HTML_PUBLICO = """
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -33,72 +33,113 @@ HTML_PUBLICO = """
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        
         body { font-family: 'Inter', sans-serif; max-width: 1400px; margin: 0 auto; padding: 0; background: #fff; color: #111; }
+
+        /* HEADER */
         header { padding: 40px 20px; text-align: center; border-bottom: 1px solid #eee; margin-bottom: 0; }
         h1 { text-transform: uppercase; letter-spacing: 2px; font-weight: 900; font-size: 2.5rem; margin: 0 0 10px 0; }
         .subtitle { color: #666; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; }
+
+        /* MAPA */
         #main-map { height: 500px; width: 100%; background: #f4f4f4; margin-bottom: 0; z-index: 1; border-bottom: 1px solid #000; }
+
+        /* BUSCA ÚNICA E MODERNA */
         .search-section { background: #f9f9f9; padding: 30px 20px; border-bottom: 1px solid #ddd; }
-        .search-container { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; max-width: 900px; margin: 0 auto; }
-        .input-group { flex-grow: 1; min-width: 250px; position: relative; }
-        input { width: 100%; padding: 15px; border: 1px solid #ccc; border-radius: 0; font-size: 14px; font-family: 'Inter', sans-serif; box-sizing: border-box; background: #fff; }
-        input:focus { outline: 2px solid #000; border-color: #000; }
-        button { padding: 15px 30px; cursor: pointer; background: #000; color: #fff; border: 1px solid #000; border-radius: 0; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; font-size: 12px; transition: all 0.2s; }
-        button:hover { background: #fff; color: #000; }
-        button.btn-cep { background: #333; border-color: #333; }
-        .loader { display: none; text-align: center; padding: 20px; color: #000; font-weight: bold; text-transform: uppercase; font-size: 0.8rem; }
-        .aviso-filtro { display:none; background: #000; color: #fff; padding: 10px; text-align: center; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; }
+        .search-wrapper { max-width: 800px; margin: 0 auto; display: flex; gap: 0; position: relative; }
+        
+        input { 
+            width: 100%; padding: 18px; border: 1px solid #ccc; border-right: none;
+            font-size: 16px; font-family: 'Inter', sans-serif; outline: none; border-radius: 0;
+        }
+        input:focus { border-color: #000; outline: 2px solid #000; z-index: 2; }
+        
+        button { 
+            padding: 0 40px; cursor: pointer; background: #000; color: #fff; 
+            border: 1px solid #000; font-weight: 800; text-transform: uppercase; 
+            letter-spacing: 1px; font-size: 14px; white-space: nowrap; border-radius: 0;
+        }
+        button:hover { background: #333; border-color: #333; }
+
+        /* STATUS E AVISOS */
+        .loader { display: none; text-align: center; padding: 20px; font-weight: bold; text-transform: uppercase; font-size: 0.8rem; color: #000; }
+        .aviso-filtro { display:none; background: #000; color: #fff; padding: 15px; text-align: center; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; }
+
+        /* GRID */
         .grid-container { padding: 40px 20px; background: #fff; }
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 30px; }
-        .card { background: #fff; border: 1px solid #e5e5e5; border-radius: 0; display: flex; flex-direction: column; cursor: pointer; transition: all 0.2s ease; position: relative; }
+
+        /* CARD (DESIGN TREK) */
+        .card { 
+            background: #fff; border: 1px solid #e5e5e5; display: flex; flex-direction: column; 
+            cursor: pointer; transition: all 0.2s ease; position: relative; border-radius: 0;
+        }
         .card:hover { border-color: #000; box-shadow: 0 10px 30px rgba(0,0,0,0.08); transform: translateY(-2px); }
-        .card-body { padding: 25px; display: flex; flex-direction: column; gap: 10px; flex-grow: 1; }
-        .card-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px; }
+
+        .card-img-top { width: 100%; height: 180px; object-fit: cover; background: #f4f4f4; display: none; }
+        .card-body { padding: 25px; display: flex; flex-direction: column; gap: 8px; flex-grow: 1; }
+        
+        .card-header { display: flex; justify-content: space-between; align-items: start; }
         .card h3 { margin: 0; font-size: 1.1rem; font-weight: 800; text-transform: uppercase; line-height: 1.2; }
-        .badge { background: #000; color: #fff; padding: 3px 8px; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; height: fit-content; }
+        .badge { background: #000; color: #fff; padding: 3px 8px; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; height: fit-content; }
+        
         .info-row { font-size: 0.9rem; color: #555; }
         .distancia-badge { margin-top: auto; font-size: 0.75rem; font-weight: bold; color: #000; border-top: 1px solid #eee; padding-top: 10px; }
-        .card-img-top { width: 100%; height: 180px; object-fit: cover; background: #f4f4f4; display: none; }
+
+        /* MODAL */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.95); z-index: 9999; justify-content: center; align-items: center; }
         .modal-body { background: white; width: 90%; max-width: 1100px; height: 85vh; border: 1px solid #ccc; display: flex; flex-direction: column; position: relative; box-shadow: 0 20px 50px rgba(0,0,0,0.2); }
         .modal-close { position: absolute; top: 20px; right: 20px; font-size: 40px; line-height: 0.5; cursor: pointer; background: transparent; border: none; color: #000; z-index: 50; padding: 10px; }
-        .modal-close:hover { color: #666; }
+        
         .modal-content-grid { display: grid; grid-template-columns: 45% 55%; flex-grow: 1; overflow: hidden; }
         @media (max-width: 800px) { .modal-content-grid { grid-template-columns: 1fr; overflow-y: auto; } }
+
         .col-info { padding: 50px 40px; overflow-y: auto; background: #fff; display: flex; flex-direction: column; gap: 20px; }
+        .col-map { position: relative; height: 100%; background: #eee; }
+        .modal-map { width: 100%; height: 100%; }
+
         .modal-title-area { margin-bottom: 20px; padding-right: 40px; }
         .modal-title { font-size: 2rem; font-weight: 900; text-transform: uppercase; line-height: 1; margin: 0 0 10px 0; }
         .modal-meta { display: flex; gap: 10px; }
         .modal-badge-black { background: #000; color: #fff; padding: 5px 10px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
         .modal-badge-outline { border: 1px solid #000; color: #000; padding: 5px 10px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
+        
         .modal-img-banner { width: 100%; height: 250px; object-fit: cover; margin-bottom: 10px; background: #eee; }
+        
         .detail-block { margin-bottom: 15px; }
         .detail-label { font-size: 0.7rem; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
         .detail-text { font-size: 1rem; color: #000; line-height: 1.5; }
         .detail-text a { color: #000; text-decoration: underline; font-weight: bold; }
-        .col-map { position: relative; height: 100%; background: #eee; }
-        .modal-map { width: 100%; height: 100%; }
+
         .admin-link { display: block; text-align: center; padding: 20px; color: #ccc; text-decoration: none; font-size: 0.8rem; text-transform: uppercase; }
     </style>
 </head>
 <body>
-    <header><h1>Soul Cycles</h1><div class="subtitle">Localizador de Lojas Autorizadas</div></header>
+
+    <header>
+        <h1>Soul Cycles</h1>
+        <div class="subtitle">Localizador de Lojas Autorizadas</div>
+    </header>
+
     <div id="aviso" class="aviso-filtro"></div>
-    <div id="loader" class="loader">Processando dados...</div>
+    <div id="loader" class="loader">Consultando GPS e Rotas...</div>
+
     <div id="main-map"></div>
+
     <div class="search-section">
-        <div class="search-container">
-            <div class="input-group"><input type="text" id="buscaInput" placeholder="BUSCAR POR NOME OU CIDADE"></div>
-            <div class="input-group" style="flex-grow: 0;"><input type="text" id="cepInput" placeholder="CEP (00000-000)"></div>
-            <button onclick="buscarTexto()">BUSCAR LOJA</button>
-            <button class="btn-cep" onclick="buscarCep()">BUSCAR POR CEP</button>
+        <div class="search-wrapper">
+            <input type="text" id="buscaInput" placeholder="DIGITE O NOME, CIDADE OU CEP (Somente números)">
+            <button onclick="realizarBusca()">BUSCAR</button>
         </div>
     </div>
+    
     <div class="grid-container">
         <p class="subtitle" style="text-align: left; margin-bottom: 20px;">{{ qtd }} RESULTADOS ENCONTRADOS</p>
         <div id="lista" class="grid"></div>
     </div>
-    <a href="/admin" class="admin-link">Login Administrativo</a>
+    
+    <a href="/admin" class="admin-link">Area Administrativa</a>
+
     <div id="modalDetalhes" class="modal-overlay" onclick="fecharModal(event)">
         <div class="modal-body" onclick="event.stopPropagation()">
             <button class="modal-close" onclick="fecharModal()">×</button>
@@ -118,18 +159,25 @@ HTML_PUBLICO = """
                     <div class="detail-block"><div class="detail-label">Links Rápidos</div><div class="detail-text" id="m_links"></div></div>
                     <div class="detail-block"><div class="detail-label">Info Interna</div><div class="detail-text" id="m_interno" style="font-size: 0.85rem; color: #666;"></div></div>
                 </div>
-                <div class="col-map"><div id="modal-map" class="modal-map"></div></div>
+                <div class="col-map">
+                    <div id="modal-map" class="modal-map"></div>
+                </div>
             </div>
         </div>
     </div>
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         var mainMap = L.map('main-map').setView([-14.2350, -51.9253], 4);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap contributors', subdomains: 'abcd', maxZoom: 20 }).addTo(mainMap);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '© OpenStreetMap contributors', subdomains: 'abcd', maxZoom: 20
+        }).addTo(mainMap);
+
         var markersLayer = L.layerGroup().addTo(mainMap);
         var radiusCircle = null;
         var modalMap = null;
         var allData = [];
+
         async function carregar() {
             let res = await fetch('/api/lojas');
             let dados = await res.json();
@@ -137,46 +185,75 @@ HTML_PUBLICO = """
             renderizar(allData);
             document.getElementById('aviso').style.display = 'none';
         }
-        async function buscarCep() {
-            let cep = document.getElementById('cepInput').value.replace(/\D/g, '');
-            if (cep.length !== 8) { alert("CEP inválido"); return; }
+
+        // --- LÓGICA DE BUSCA UNIFICADA ---
+        function realizarBusca() {
+            let termo = document.getElementById('buscaInput').value.trim();
+            if(!termo) { carregar(); return; }
+
+            // Regex: Aceita CEP com ou sem traço (12345-678 ou 12345678)
+            let cepLimpo = termo.replace(/\D/g, '');
+            
+            if(cepLimpo.length === 8) {
+                // É um CEP
+                buscarCep(cepLimpo);
+            } else {
+                // É texto normal
+                buscarTexto(termo);
+            }
+        }
+
+        async function buscarCep(cep) {
             document.getElementById('loader').style.display = 'block';
             document.getElementById('lista').style.opacity = '0.3';
+
             try {
                 let res = await fetch('/api/lojas?cep=' + cep);
                 let resposta = await res.json();
-                if(resposta.erro) { alert(resposta.erro); } else {
+                
+                if(resposta.erro) {
+                    alert(resposta.erro);
+                } else {
                     let lojasFiltradas = resposta.lojas;
                     let centro = resposta.centro;
+
                     renderizar(lojasFiltradas);
+                    
                     document.getElementById('aviso').style.display = 'block';
                     if (lojasFiltradas.length > 0) {
                         document.getElementById('aviso').innerText = `ENCONTRADAS ${lojasFiltradas.length} LOJAS EM UM RAIO DE 100KM DE ${resposta.endereco_base}`;
                     } else {
                         document.getElementById('aviso').innerText = `NENHUMA LOJA PRÓXIMA A ${resposta.endereco_base}`;
                     }
+
                     if(centro) {
                         mainMap.setView([centro[0], centro[1]], 8);
                         if(radiusCircle) mainMap.removeLayer(radiusCircle);
-                        radiusCircle = L.circle([centro[0], centro[1]], { color: '#000', fillColor: '#000', fillOpacity: 0.05, weight: 1, radius: 100000 }).addTo(mainMap);
+                        radiusCircle = L.circle([centro[0], centro[1]], {
+                            color: '#000', fillColor: '#000', fillOpacity: 0.05, weight: 1, radius: 100000
+                        }).addTo(mainMap);
                         mainMap.fitBounds(radiusCircle.getBounds());
                     }
                 }
             } catch (e) { console.error(e); } 
-            finally { document.getElementById('loader').style.display = 'none'; document.getElementById('lista').style.opacity = '1'; }
+            finally {
+                document.getElementById('loader').style.display = 'none';
+                document.getElementById('lista').style.opacity = '1';
+            }
         }
-        function buscarTexto() {
+
+        function buscarTexto(termo) {
             if(radiusCircle) { mainMap.removeLayer(radiusCircle); radiusCircle = null; }
             document.getElementById('aviso').style.display = 'none';
-            let termo = document.getElementById('buscaInput').value.toLowerCase();
-            if(!termo) { carregar(); return; }
+            
             fetch('/api/lojas').then(r => r.json()).then(d => {
                 let todas = d.lojas;
-                let filtrados = todas.filter(l => (l.nome + ' ' + l.municipio + ' ' + l.uf).toLowerCase().includes(termo));
+                let filtrados = todas.filter(l => (l.nome + ' ' + l.municipio + ' ' + l.uf).toLowerCase().includes(termo.toLowerCase()));
                 renderizar(filtrados);
                 if(filtrados.length > 0 && filtrados[0].lat) mainMap.setView([filtrados[0].lat, filtrados[0].lon], 10);
             });
         }
+
         function renderizar(lojas) {
             markersLayer.clearLayers();
             let html = '';
@@ -194,7 +271,10 @@ HTML_PUBLICO = """
                     <div class="card" onclick='abrirModal(${JSON.stringify(l)})'>
                         ${imgHtml}
                         <div class="card-body">
-                            <div class="card-header"><h3>${l.nome}</h3><span class="badge">${l.perfil || 'LOJA'}</span></div>
+                            <div class="card-header">
+                                <h3>${l.nome}</h3>
+                                <span class="badge">${l.perfil || 'LOJA'}</span>
+                            </div>
                             <div class="info-row">${l.municipio} - ${l.uf}</div>
                             ${distHtml}
                         </div>
@@ -203,6 +283,7 @@ HTML_PUBLICO = """
             }
             document.getElementById('lista').innerHTML = html;
         }
+
         function abrirModal(l) {
             document.getElementById('m_nome').innerText = l.nome;
             document.getElementById('m_perfil').innerText = l.perfil;
@@ -210,22 +291,28 @@ HTML_PUBLICO = """
             document.getElementById('m_codigo_area').style.display = l.codigo ? 'inline-block' : 'none';
             if(l.codigo) document.getElementById('m_codigo_area').innerText = `COD: ${l.codigo}`;
             document.getElementById('m_endereco').innerText = `${l.endereco}, ${l.numero} - ${l.bairro || ''}`;
+            
             let contatoHtml = "";
             if(l.telefone) contatoHtml += `${l.telefone}<br>`;
             if(l.email) contatoHtml += `${l.email}<br>`;
             if(l.contato) contatoHtml += `Resp: ${l.contato}`;
             document.getElementById('m_contato').innerHTML = contatoHtml || "-";
+
             let horaHtml = "";
             if(l.horario_seg_sex) horaHtml += `Seg-Sex: ${l.horario_seg_sex}<br>`;
             if(l.horario_sab) horaHtml += `Sáb: ${l.horario_sab}`;
             document.getElementById('m_horario').innerHTML = horaHtml || "-";
+
             document.getElementById('m_interno').innerText = `Vendedor: ${l.vendedor || '-'} | Time: ${l.time_soul || '-'}`;
+
             let linksHtml = "";
             if(l.telefone) linksHtml += `<a href="https://wa.me/55${l.telefone.replace(/\D/g,'')}" target="_blank">WHATSAPP</a> &nbsp;&nbsp; `;
             if(l.instagram) linksHtml += `<a href="https://instagram.com/${l.instagram.replace('@','').replace('/','')}" target="_blank">INSTAGRAM</a>`;
             document.getElementById('m_links').innerHTML = linksHtml;
+
             let img = document.getElementById('m_foto');
             if(l.foto) { img.src = "/static/uploads/" + l.foto; img.style.display = "block"; } else { img.style.display = "none"; }
+
             document.getElementById('modalDetalhes').style.display = 'flex';
             setTimeout(() => {
                 if (!modalMap) {
@@ -242,19 +329,27 @@ HTML_PUBLICO = """
                     });
                     L.marker([l.lat, l.lon], {icon: blackIcon}).addTo(modalMap);
                     modalMap.invalidateSize();
-                } else { modalMap.setView([-14.23, -51.92], 4); modalMap.invalidateSize(); }
+                } else {
+                    modalMap.setView([-14.23, -51.92], 4);
+                    modalMap.invalidateSize();
+                }
             }, 200);
         }
-        function fecharModal(e) { if(!e || e.target.id === 'modalDetalhes' || e.target.className === 'modal-close') { document.getElementById('modalDetalhes').style.display = 'none'; } }
-        document.getElementById("buscaInput").addEventListener("keypress", function(event) { if (event.key === "Enter") buscarTexto(); });
-        document.getElementById("cepInput").addEventListener("keypress", function(event) { if (event.key === "Enter") buscarCep(); });
+
+        function fecharModal(e) {
+            if(!e || e.target.id === 'modalDetalhes' || e.target.className === 'modal-close') {
+                document.getElementById('modalDetalhes').style.display = 'none';
+            }
+        }
+        
+        document.getElementById("buscaInput").addEventListener("keypress", function(event) { if (event.key === "Enter") realizarBusca(); });
         carregar();
     </script>
 </body>
 </html>
 """
 
-# --- HTML ADMIN (ESTILO SIMPLIFICADO) ---
+# --- HTML ADMIN (ESTILO TREK - CORRIGIDO) ---
 HTML_ADMIN = """
 <!DOCTYPE html>
 <html>
@@ -264,16 +359,21 @@ HTML_ADMIN = """
         body { font-family: 'Segoe UI', sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #eee; }
         .container { background: white; padding: 40px; border: 1px solid #ccc; }
         h2 { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 15px; margin-top:0; text-transform: uppercase; }
+        
         .btn { padding: 10px 20px; border: none; cursor: pointer; font-weight: bold; text-decoration: none; color: white; background: #000; text-transform: uppercase; font-size: 0.8rem; }
         .btn:hover { background: #333; }
         .btn-danger { background: #dc3545; }
         .btn-warning { background: #ffc107; color: #000; }
+        
         input, select { padding: 10px; width: 100%; border: 1px solid #ccc; box-sizing: border-box; margin-bottom: 5px; }
         label { font-size: 0.7rem; font-weight: bold; color: #666; text-transform: uppercase; }
+        
         table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 0.9rem; }
         th { background: #000; color: #fff; text-align: left; padding: 10px; text-transform: uppercase; font-size: 0.8rem; }
         td { padding: 10px; border-bottom: 1px solid #eee; }
         tr:hover { background: #f9f9f9; }
+
+        /* Modal Admin */
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 999; overflow-y: auto; }
         .modal-content { background: white; width: 90%; max-width: 800px; margin: 50px auto; padding: 30px; }
         .form-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
@@ -285,29 +385,39 @@ HTML_ADMIN = """
     <div class="container">
         <a href="/" style="color:#666; text-decoration:none; font-size:0.8rem; text-transform:uppercase;">← Voltar ao Site</a>
         {% if msg %} <div style="background:#000; color:#fff; padding:10px; margin:10px 0; text-align:center;">{{ msg }}</div> {% endif %}
+        
         <h2>Gerenciar Lojas <button onclick="toggleForm()" class="btn">Nova Loja</button></h2>
-        <div id="form-container" style="display:none; background:#f9f9f9; padding:20px; border:1px solid #ddd; margin-bottom:20px;">
-            <form action="/admin/add" method="POST" enctype="multipart/form-data" class="form-grid">
-                <div class="section-title">Dados</div>
-                <div class="col-2"><label>Nome</label><input type="text" name="nome" required></div>
-                <div class="col-1"><label>Perfil</label><select name="perfil"><option>Loja</option><option>Mecânico</option><option>Revenda</option></select></div>
-                <div class="col-1"><label>Código</label><input type="text" name="codigo"></div>
-                <div class="col-4"><label>Foto</label><input type="file" name="foto" accept="image/*"></div>
-                <div class="section-title">Endereço</div>
-                <div class="col-2"><label>Rua</label><input type="text" name="endereco" required></div>
-                <div class="col-1"><label>Nº</label><input type="text" name="numero" required></div>
-                <div class="col-1"><label>Bairro</label><input type="text" name="bairro"></div>
-                <div class="col-2"><label>Cidade</label><input type="text" name="municipio" required></div>
-                <div class="col-1"><label>UF</label><input type="text" name="uf" required></div>
-                <div class="col-1"><label>CEP</label><input type="text" name="cep"></div>
-                <div class="section-title">Extras</div>
-                <div class="col-2"><label>Telefone</label><input type="text" name="telefone"></div>
-                <div class="col-2"><label>Vendedor</label><input type="text" name="vendedor"></div>
-                <input type="hidden" name="cnpj"><input type="hidden" name="contato_nome">
-                <div class="col-4" style="margin-top:10px"><button class="btn" style="width:100%">Salvar Cadastro</button></div>
-            </form>
+
+        <div id="modalAdd" class="modal">
+            <div class="modal-content">
+                <h3 style="text-transform:uppercase;">Nova Loja <button onclick="fecharAdd()" class="btn btn-danger" style="float:right">X</button></h3>
+                <form action="/admin/add" method="POST" enctype="multipart/form-data" class="form-grid">
+                    <div class="section-title">Dados</div>
+                    <div class="col-2"><label>Nome</label><input type="text" name="nome" required></div>
+                    <div class="col-1"><label>Perfil</label><select name="perfil"><option>Loja</option><option>Mecânico</option><option>Revenda</option></select></div>
+                    <div class="col-1"><label>Código</label><input type="text" name="codigo"></div>
+                    <div class="col-4"><label>Foto</label><input type="file" name="foto" accept="image/*"></div>
+                    
+                    <div class="section-title">Endereço</div>
+                    <div class="col-2"><label>Rua</label><input type="text" name="endereco" required></div>
+                    <div class="col-1"><label>Nº</label><input type="text" name="numero" required></div>
+                    <div class="col-1"><label>Bairro</label><input type="text" name="bairro"></div>
+                    <div class="col-2"><label>Cidade</label><input type="text" name="municipio" required></div>
+                    <div class="col-1"><label>UF</label><input type="text" name="uf" required></div>
+                    <div class="col-1"><label>CEP</label><input type="text" name="cep"></div>
+                    
+                    <div class="section-title">Extras</div>
+                    <div class="col-2"><label>Telefone</label><input type="text" name="telefone"></div>
+                    <div class="col-2"><label>Vendedor</label><input type="text" name="vendedor"></div>
+                    <input type="hidden" name="cnpj"><input type="hidden" name="contato_nome">
+                    
+                    <div class="col-4" style="margin-top:10px"><button class="btn" style="width:100%">Salvar Cadastro</button></div>
+                </form>
+            </div>
         </div>
+
         <input type="text" id="busca" onkeyup="filtrar()" placeholder="PESQUISAR..." style="padding:15px; border:2px solid #000; margin-bottom:20px;">
+
         <table id="tabela">
             <thead><tr><th>Cód</th><th>Loja</th><th>Local</th><th>Foto</th><th>Ações</th></tr></thead>
             <tbody>
@@ -327,6 +437,7 @@ HTML_ADMIN = """
             </tbody>
         </table>
     </div>
+
     <div id="modalEdit" class="modal">
         <div class="modal-content">
             <h3 style="text-transform:uppercase;">Editar <button onclick="fechar()" class="btn btn-danger" style="float:right">X</button></h3>
@@ -352,7 +463,8 @@ HTML_ADMIN = """
         </div>
     </div>
     <script>
-        function toggleForm() { document.getElementById('form-container').style.display = 'block'; }
+        function toggleForm() { document.getElementById('modalAdd').style.display = 'block'; }
+        function fecharAdd() { document.getElementById('modalAdd').style.display = 'none'; }
         function fechar() { document.getElementById('modalEdit').style.display = 'none'; }
         function editar(l) {
             document.getElementById('modalEdit').style.display = 'block';
