@@ -5,7 +5,7 @@ from unicodedata import normalize
 
 app = Flask(__name__)
 
-# --- CONFIGURAÇÃO DO HTML (INTERFACE VISUAL) ---
+# --- CONFIGURAÇÃO DO HTML ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -17,53 +17,36 @@ HTML_TEMPLATE = """
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background-color: #f4f6f8; color: #333; }
         h1 { text-align: center; color: #111; margin-bottom: 5px; }
         .subtitle { text-align: center; color: #666; margin-bottom: 30px; }
-        
-        /* Barra de Busca */
         .search-container { display: flex; gap: 10px; justify-content: center; margin-bottom: 30px; }
         input { padding: 12px 15px; width: 60%; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; outline: none; }
-        input:focus { border-color: #000; }
-        button { padding: 12px 25px; cursor: pointer; background: #000; color: #fff; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; transition: background 0.2s; }
+        button { padding: 12px 25px; cursor: pointer; background: #000; color: #fff; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; }
         button:hover { background: #444; }
-
-        /* Grid de Cards */
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; }
-        
-        /* Card da Loja */
-        .card { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); border-left: 5px solid #000; transition: transform 0.2s; }
-        .card:hover { transform: translateY(-3px); }
-        
-        .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
-        .card h3 { margin: 0; font-size: 1.2rem; color: #000; }
-        .badge { background: #eee; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; color: #555; text-transform: uppercase; }
-        
+        .card { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); border-left: 5px solid #000; }
+        .card h3 { margin: 0 0 10px 0; font-size: 1.2rem; color: #000; }
+        .badge { background: #eee; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; color: #555; text-transform: uppercase; float: right; }
         .info-group { margin-bottom: 12px; font-size: 0.95rem; line-height: 1.5; }
         .info-group strong { display: block; font-size: 0.8rem; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
-        .highlight { color: #000; font-weight: 500; }
-        
         .contact-links { margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap; }
         .btn-link { text-decoration: none; background: #f0f0f0; color: #333; padding: 6px 12px; border-radius: 4px; font-size: 0.85rem; font-weight: 600; }
         .btn-link.whatsapp { background: #25D366; color: #fff; }
         .btn-link.insta { background: #E1306C; color: #fff; }
-
-        .error { text-align: center; padding: 20px; background: #fff; border-radius: 8px; color: #d9534f; }
-        .loading { text-align: center; color: #666; font-style: italic; }
+        .error { text-align: center; padding: 20px; background: #fff; border-radius: 8px; color: #d9534f; grid-column: 1/-1; }
+        .loading { text-align: center; color: #666; font-style: italic; grid-column: 1/-1; }
     </style>
 </head>
 <body>
-
     <h1>Encontre uma Loja Soul</h1>
     <p class="subtitle">{{ qtd }} autorizadas cadastradas</p>
     
     <div class="search-container">
-        <input type="text" id="cidadeInput" placeholder="Digite sua Cidade ou Estado (ex: Itajaí, SP)...">
+        <input type="text" id="cidadeInput" placeholder="Digite Cidade ou Estado (ex: Itajaí, SP)...">
         <button onclick="buscar()">Buscar</button>
     </div>
     
-    <div id="resultado" class="grid">
-        </div>
+    <div id="resultado" class="grid"></div>
 
     <script>
-        // Ativa a busca ao apertar Enter
         document.getElementById("cidadeInput").addEventListener("keypress", function(event) {
             if (event.key === "Enter") { buscar(); }
         });
@@ -77,7 +60,7 @@ HTML_TEMPLATE = """
 
             btn.innerText = 'Buscando...';
             btn.disabled = true;
-            divRes.innerHTML = '<p class="loading" style="grid-column: 1/-1;">Carregando dados...</p>';
+            divRes.innerHTML = '<p class="loading">Carregando dados...</p>';
             
             try {
                 let response = await fetch('/lojas?busca=' + termo);
@@ -86,14 +69,10 @@ HTML_TEMPLATE = """
                 let html = '';
                 if(dados.length === 0) {
                     divRes.classList.remove('grid');
-                    html = '<div class="error" style="grid-column: 1/-1;">Nenhuma loja encontrada para "'+termo+'".<br>Tente digitar apenas o nome da cidade ou a sigla do estado (ex: SC).</div>';
+                    html = '<div class="error">Nenhuma loja encontrada para "'+termo+'".<br>Tente digitar apenas o nome da cidade ou a sigla do estado.</div>';
                 } else {
                     divRes.classList.add('grid');
                     dados.forEach(item => {
-                        // MAPEAMENTO DOS SEUS DADOS EXATOS
-                        // O Python transformou tudo para minúsculo e trocou espaços por _
-                        // Ex: "SEG. A SEX." virou "seg._a_sex."
-                        
                         let nome = item.nome || 'Loja Autorizada';
                         let perfil = item.perfil || 'Autorizada';
                         let cidade = item.municipio || '';
@@ -106,20 +85,17 @@ HTML_TEMPLATE = """
                         let contato = item.contato || '';
                         let email = item['e-mail'] || '';
                         let insta = item.instagram || '';
-                        let horario_sem = item['seg._a_sex.'] || '';
-                        let horario_sab = item['sábado'] || '';
+                        let sem = item['seg._a_sex.'] || '';
+                        let sab = item['sábado'] || '';
 
-                        // Monta o Card HTML
                         html += `
                         <div class="card">
-                            <div class="card-header">
-                                <h3>${nome}</h3>
-                                <span class="badge">${perfil}</span>
-                            </div>
+                            <span class="badge">${perfil}</span>
+                            <h3>${nome}</h3>
                             
                             <div class="info-group">
                                 <strong>Localização</strong>
-                                <span class="highlight">${cidade} - ${uf}</span><br>
+                                ${cidade} - ${uf}<br>
                                 ${endereco}, ${num}<br>
                                 ${bairro} - CEP: ${cep}
                             </div>
@@ -131,15 +107,15 @@ HTML_TEMPLATE = """
                                 <span style="font-size: 0.85em; color: #666;">${email}</span>
                             </div>
 
-                            ${ (horario_sem || horario_sab) ? `
+                            ${ (sem || sab) ? `
                             <div class="info-group">
                                 <strong>Horário</strong>
-                                ${horario_sem ? `Seg-Sex: ${horario_sem}<br>` : ''}
-                                ${horario_sab ? `Sáb: ${horario_sab}` : ''}
+                                ${sem ? `Seg-Sex: ${sem}<br>` : ''}
+                                ${sab ? `Sáb: ${sab}` : ''}
                             </div>` : ''}
 
                             <div class="contact-links">
-                                ${tel ? `<a href="tel:${tel.replace(/[^0-9]/g, '')}" class="btn-link">📞 Ligar</a>` : ''}
+                                ${tel ? `<a href="tel:${tel.replace(/[^0-9]/g, '')}" class="btn-link">Ligar</a>` : ''}
                                 ${tel ? `<a href="https://wa.me/55${tel.replace(/[^0-9]/g, '')}" target="_blank" class="btn-link whatsapp">WhatsApp</a>` : ''}
                                 ${insta ? `<a href="https://instagram.com/${insta.replace('@','').replace('/','')}" target="_blank" class="btn-link insta">Instagram</a>` : ''}
                             </div>
@@ -149,7 +125,7 @@ HTML_TEMPLATE = """
                 divRes.innerHTML = html;
             } catch (error) {
                 console.error(error);
-                divRes.innerHTML = '<p class="error" style="grid-column: 1/-1;">Ocorreu um erro ao buscar. Tente novamente.</p>';
+                divRes.innerHTML = '<p class="error">Ocorreu um erro ao buscar.</p>';
             } finally {
                 btn.innerText = 'Buscar';
                 btn.disabled = false;
@@ -164,6 +140,7 @@ HTML_TEMPLATE = """
 
 def remover_acentos(txt):
     if not txt: return ""
+    # Esta função remove acentos para facilitar a busca
     return normalize('NFKD', str(txt)).encode('ASCII', 'ignore').decode('ASCII').lower()
 
 def carregar_dados():
@@ -174,14 +151,12 @@ def carregar_dados():
         return []
 
     try:
-        # Tenta ler UTF-8, se falhar tenta Latin-1
         try:
             arquivo = open(caminho, mode='r', encoding='utf-8-sig')
         except:
             arquivo = open(caminho, mode='r', encoding='latin-1')
 
         with arquivo as f:
-            # Descobre separador (; ou ,)
             conteudo = f.read(2048)
             f.seek(0)
             delimitador = ';' if conteudo.count(';') > conteudo.count(',') else ','
@@ -189,8 +164,6 @@ def carregar_dados():
             reader = csv.DictReader(f, delimiter=delimitador)
             
             for row in reader:
-                # Limpa as chaves para facilitar o uso no JS
-                # Ex: "SEG. A SEX." -> "seg._a_sex."
                 item_limpo = {}
                 for k, v in row.items():
                     if k:
@@ -221,5 +194,14 @@ def get_lojas():
     
     resultado = []
     for loja in todas:
-        # Verifica se o termo está em MUNICIPIO ou UF
-        mun = remover_acentos(
+        mun = remover_acentos(loja.get('municipio', ''))
+        uf = remover_acentos(loja.get('uf', ''))
+        nome = remover_acentos(loja.get('nome', ''))
+        
+        if (termo_limpo in mun) or (termo_limpo == uf) or (termo_limpo in nome):
+            resultado.append(loja)
+            
+    return jsonify(resultado)
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8080)
