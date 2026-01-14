@@ -1,35 +1,47 @@
 from flask import Flask, jsonify, request
-import pandas as pd
+import csv
 import os
 
 app = Flask(__name__)
 
-# Configuração
-# Se seu arquivo tiver outro nome, mude APENAS AQUI em baixo:
-NOME_DO_ARQUIVO = 'dados.xlsx' 
+def carregar_dados():
+    lojas = []
+    # Verifica se o arquivo existe antes de tentar ler
+    if not os.path.exists('dados.csv'):
+        print("ERRO: O arquivo dados.csv não foi encontrado.")
+        return []
 
-try:
-    # Agora usamos read_excel e especificamos a engine openpyxl
-    df = pd.read_excel(NOME_DO_ARQUIVO, engine='openpyxl')
-    
-    # Limpeza: remove espaços e deixa tudo minúsculo no cabeçalho
-    df.columns = [str(c).strip().replace(' ', '_').lower() for c in df.columns]
-    
-    # Converte tudo para texto (string) para evitar erros com números/CEPs
-    df = df.astype(str)
-    
-    # Remove linhas que estejam vazias (acontece muito em Excel)
-    df = df.dropna(how='all')
-    
-except Exception as e:
-    print(f"ERRO CRÍTICO AO LER EXCEL: {e}")
-    df = pd.DataFrame()
+    try:
+        # Lê o arquivo CSV usando a biblioteca nativa do Python (super leve)
+        with open('dados.csv', mode='r', encoding='utf-8-sig') as f:
+            # O delimiter=';' ou ',' depende do seu Excel. 
+            # O Python tenta adivinhar, mas se der erro, trocamos para delimiter=';'
+            leitor = csv.DictReader(f) 
+            
+            for linha in leitor:
+                # Limpeza: remove espaços das chaves e valores
+                item_limpo = {}
+                for k, v in linha.items():
+                    chave = str(k).strip().lower().replace(' ', '_')
+                    valor = str(v).strip()
+                    item_limpo[chave] = valor
+                lojas.append(item_limpo)
+    except Exception as e:
+        print(f"Erro ao ler CSV: {e}")
+        
+    return lojas
 
 @app.route('/')
 def home():
-    return """
+    # Carrega os dados para ver se está funcionando
+    dados = carregar_dados()
+    qtd = len(dados)
+    
+    return f"""
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h1>Busca Soul (Versão Excel)</h1>
+        <h1>Busca Soul</h1>
+        <p>Status: <strong>{qtd} lojas carregadas.</strong></p>
+        <hr>
         <p>Digite sua cidade:</p>
         <input type="text" id="cidadeInput" placeholder="Ex: Itajai">
         <button onclick="buscar()">Buscar</button>
@@ -43,17 +55,22 @@ def home():
             let dados = await response.json();
             
             let html = '';
-            if(dados.length === 0) html = '<p>Nada encontrado.</p>';
+            if(dados.length === 0) html = '<p>Nenhuma loja encontrada nesta cidade.</p>';
             
             dados.forEach(loja => {
-                // Tenta pegar o nome da loja, ou usa um padrão
-                let nome = loja.loja || loja.nome_fantasia || 'Loja Soul';
-                
+                // Tenta encontrar o nome da loja em várias colunas possíveis
+                let nome = loja.loja || loja.nome || loja.revenda || 'Loja Soul';
+                let end = loja.endereço || loja.endereco || '';
+                let num = loja.número || loja.numero || '';
+                let tel = loja.telefone || loja.celular || '';
+                let cid = loja.cidade || '';
+                let est = loja.estado || loja.uf || '';
+
                 html += `<div style="border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; border-radius: 5px;">
                     <h3>${nome}</h3>
-                    <p><strong>Cidade:</strong> ${loja.cidade} - ${loja.estado}</p>
-                    <p><strong>Endereço:</strong> ${loja.endereço || ''}, ${loja.número || ''}</p>
-                    <p><strong>Telefone:</strong> ${loja.telefone || ''}</p>
+                    <p><strong>Local:</strong> ${cid} - ${est}</p>
+                    <p><strong>Endereço:</strong> ${end}, ${num}</p>
+                    <p><strong>Contato:</strong> ${tel}</p>
                 </div>`;
             });
             document.getElementById('resultado').innerHTML = html;
@@ -63,19 +80,18 @@ def home():
 
 @app.route('/lojas')
 def get_lojas():
-    cidade_busca = request.args.get('cidade')
+    cidade_busca = request.args.get('cidade', '').lower()
+    todas = carregar_dados()
     
-    if df.empty:
-        return jsonify([])
-
-    if cidade_busca:
-        # Filtra onde a cidade contém o texto (insensível a maiúsculas)
-        # O 'nan' é para ignorar células vazias
-        resultado = df[df['cidade'].str.contains(cidade_busca, case=False, na=False)]
-    else:
-        resultado = df
-        
-    return jsonify(resultado.to_dict(orient='records'))
+    if not cidade_busca:
+        return jsonify(todas)
+    
+    # Filtro simples
+    resultado = [
+        loja for loja in todas 
+        if cidade_busca in str(loja.get('cidade', '')).lower()
+    ]
+    return jsonify(resultado)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
