@@ -1,0 +1,19 @@
+[package]
+name = "soul-lojas"
+version = "0.1.0"
+description = "Busca de Lojas Soul"
+
+[dependencies]
+"python/python" = "3.10"
+
+[fs]
+"/app" = "."
+
+[command.run]
+module = "python/python"
+runner = "wasi"
+annotations = { wagi = "true" }
+args = ["/app/app.py"]
+
+[[port]]
+port = 8080
