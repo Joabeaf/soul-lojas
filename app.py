@@ -2,6 +2,8 @@ from flask import Flask, jsonify, request, render_template_string, redirect, url
 import sqlite3
 import csv
 import os
+import json
+import urllib.request
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 from werkzeug.utils import secure_filename
@@ -125,7 +127,7 @@ HTML_PUBLICO = """
     </div>
     
     <div id="aviso" class="aviso-filtro"></div>
-    <div id="loader" class="loader">Calculando rota e distâncias...</div>
+    <div id="loader" class="loader">Consultando CEP e calculando rotas...</div>
     <div id="lista" class="grid"></div>
     
     <a href="/admin" class="admin-link">Area Administrativa</a>
@@ -163,7 +165,6 @@ HTML_PUBLICO = """
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        // Foca o mapa inicialmente no Brasil
         var mainMap = L.map('main-map').setView([-14.2350, -51.9253], 4);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(mainMap);
         var markersLayer = L.layerGroup().addTo(mainMap);
@@ -200,24 +201,17 @@ HTML_PUBLICO = """
                     
                     document.getElementById('aviso').style.display = 'block';
                     if (lojasFiltradas.length > 0) {
-                        document.getElementById('aviso').innerText = `Encontramos ${lojasFiltradas.length} lojas num raio de 100km do CEP ${cep}.`;
+                        document.getElementById('aviso').innerText = `Encontramos ${lojasFiltradas.length} lojas num raio de 100km de ${resposta.endereco_base}.`;
                     } else {
-                        document.getElementById('aviso').innerText = `Nenhuma loja encontrada num raio de 100km do CEP ${cep}.`;
+                        document.getElementById('aviso').innerText = `Nenhuma loja encontrada num raio de 100km de ${resposta.endereco_base}.`;
                     }
 
                     if(centro) {
-                        // Zoom no local do CEP
-                        mainMap.setView([centro[0], centro[1]], 8);
-                        
+                        mainMap.setView([centro[0], centro[1]], 9);
                         if(radiusCircle) mainMap.removeLayer(radiusCircle);
                         radiusCircle = L.circle([centro[0], centro[1]], {
-                            color: '#007bff',
-                            fillColor: '#007bff',
-                            fillOpacity: 0.1,
-                            radius: 100000 // 100km
+                            color: '#007bff', fillColor: '#007bff', fillOpacity: 0.1, radius: 100000
                         }).addTo(mainMap);
-                        
-                        // Ajusta o mapa para caber o círculo
                         mainMap.fitBounds(radiusCircle.getBounds());
                     }
                 }
@@ -233,21 +227,13 @@ HTML_PUBLICO = """
         function buscarTexto() {
             if(radiusCircle) { mainMap.removeLayer(radiusCircle); radiusCircle = null; }
             document.getElementById('aviso').style.display = 'none';
-
             let termo = document.getElementById('buscaInput').value.toLowerCase();
-            
             if(!termo) { carregar(); return; }
-
-            // Recarrega todos os dados sem filtro de distância
             fetch('/api/lojas').then(r => r.json()).then(d => {
                 let todas = d.lojas;
-                let filtrados = todas.filter(l => 
-                    (l.nome + ' ' + l.municipio + ' ' + l.uf).toLowerCase().includes(termo)
-                );
+                let filtrados = todas.filter(l => (l.nome + ' ' + l.municipio + ' ' + l.uf).toLowerCase().includes(termo));
                 renderizar(filtrados);
-                if(filtrados.length > 0 && filtrados[0].lat) {
-                    mainMap.setView([filtrados[0].lat, filtrados[0].lon], 10);
-                }
+                if(filtrados.length > 0 && filtrados[0].lat) mainMap.setView([filtrados[0].lat, filtrados[0].lon], 10);
             });
         }
 
@@ -261,7 +247,6 @@ HTML_PUBLICO = """
         function renderizar(lojas) {
             markersLayer.clearLayers();
             let html = '';
-            
             if (!lojas || lojas.length === 0) html = '<p style="text-align:center; grid-column:1/-1;">Nenhuma loja encontrada.</p>';
             else {
                 lojas.forEach(l => {
@@ -270,11 +255,9 @@ HTML_PUBLICO = """
                         m.on('click', () => abrirModal(l));
                         markersLayer.addLayer(m);
                     }
-
                     let imagemHtml = l.foto ? 
                         `<img src="/static/uploads/${l.foto}" class="card-img">` : 
                         `<div class="card-initials">${pegarIniciais(l.nome)}</div>`;
-                    
                     let distHtml = l.distancia ? 
                         `<div class="distancia-badge">📍 A ${l.distancia} km de você</div>` : '';
 
@@ -299,7 +282,6 @@ HTML_PUBLICO = """
             document.getElementById('m_nome').innerText = l.nome;
             document.getElementById('m_perfil').innerText = l.perfil;
             document.getElementById('m_local').innerText = `${l.municipio} - ${l.uf}`;
-            
             let codigoHtml = l.codigo ? `<span class="modal-code">CÓD: ${l.codigo}</span>` : '';
             document.getElementById('m_codigo_area').innerHTML = codigoHtml;
             document.getElementById('m_endereco').innerText = `${l.endereco}, ${l.numero} - ${l.bairro || ''} (CEP: ${l.cep || ''})`;
@@ -353,7 +335,6 @@ HTML_PUBLICO = """
         
         document.getElementById("buscaInput").addEventListener("keypress", function(event) { if (event.key === "Enter") buscarTexto(); });
         document.getElementById("cepInput").addEventListener("keypress", function(event) { if (event.key === "Enter") buscarCep(); });
-
         carregar();
     </script>
 </body>
@@ -374,17 +355,14 @@ HTML_ADMIN = """
         .btn-danger { background: #dc3545; }
         .btn-warning { background: #ffc107; color: #000; }
         .btn-info { background: #17a2b8; }
-        
         #form-container { display: none; background: #f9f9f9; padding: 20px; border: 1px solid #ddd; margin-bottom: 20px; border-radius: 8px; }
         .form-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
         .col-1 { grid-column: span 1; } .col-2 { grid-column: span 2; } .col-4 { grid-column: span 4; }
         input, select { padding: 8px; width: 100%; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
         label { font-size: 0.8em; font-weight: bold; color: #555; }
         .section-title { grid-column: span 4; margin-top: 10px; border-bottom: 1px solid #ccc; font-weight: bold; }
-        
         table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.85em; }
         th, td { padding: 8px; border-bottom: 1px solid #ddd; text-align: left; }
-        
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; overflow-y: auto; }
         .modal-content { background: white; width: 95%; max-width: 800px; margin: 30px auto; padding: 20px; border-radius: 8px; }
     </style>
@@ -392,15 +370,11 @@ HTML_ADMIN = """
 <body>
     <div class="container">
         <a href="/" style="color:#666; text-decoration:none;">← Voltar ao Site</a>
-        
         {% if msg %} <div style="background:#d4edda; color:#155724; padding:10px; margin:10px 0; text-align:center;">{{ msg }}</div> {% endif %}
-
         <h2>Gerenciar Lojas <button onclick="toggleForm()" class="btn">➕ Nova Loja</button></h2>
-
         <div id="form-container">
             <h3>Nova Loja</h3>
             <form action="/admin/add" method="POST" enctype="multipart/form-data" class="form-grid">
-                
                 <div class="section-title">Dados & Foto</div>
                 <div class="col-2"><label>Nome</label><input type="text" name="nome" required></div>
                 <div class="col-1"><label>Perfil</label>
@@ -408,7 +382,6 @@ HTML_ADMIN = """
                 </div>
                 <div class="col-1"><label>Código</label><input type="text" name="codigo"></div>
                 <div class="col-4"><label>📸 Foto da Loja</label><input type="file" name="foto" accept="image/*"></div>
-
                 <div class="section-title">Localização</div>
                 <div class="col-2"><label>Rua</label><input type="text" name="endereco" required></div>
                 <div class="col-1"><label>Número</label><input type="text" name="numero" required></div>
@@ -416,19 +389,14 @@ HTML_ADMIN = """
                 <div class="col-2"><label>Cidade</label><input type="text" name="municipio" required></div>
                 <div class="col-1"><label>UF</label><input type="text" name="uf" required></div>
                 <div class="col-1"><label>CEP</label><input type="text" name="cep"></div>
-
                 <div class="section-title">Extras</div>
                 <div class="col-2"><label>Telefone</label><input type="text" name="telefone"></div>
                 <div class="col-2"><label>Vendedor</label><input type="text" name="vendedor"></div>
-                
                 <input type="hidden" name="cnpj" value=""><input type="hidden" name="contato_nome" value="">
-                
                 <div class="col-4" style="margin-top:10px"><button class="btn" style="width:100%">Salvar</button></div>
             </form>
         </div>
-
         <input type="text" id="busca" onkeyup="filtrar()" placeholder="🔍 Pesquisar..." style="width:100%; padding:10px; margin-bottom:10px;">
-
         <table id="tabela">
             <thead><tr><th>Cód</th><th>Loja</th><th>Local</th><th>Foto</th><th>Ações</th></tr></thead>
             <tbody>
@@ -448,37 +416,30 @@ HTML_ADMIN = """
             </tbody>
         </table>
     </div>
-
     <div id="modalEdit" class="modal">
         <div class="modal-content">
             <h3>Editar <button onclick="fechar()" class="btn btn-danger" style="float:right">X</button></h3>
             <form action="/admin/update" method="POST" enctype="multipart/form-data" class="form-grid">
                 <input type="hidden" name="id" id="e_id">
-                
                 <div class="col-2"><label>Código</label><input type="text" name="codigo" id="e_codigo"></div>
                 <div class="col-2"><label>Nome</label><input type="text" name="nome" id="e_nome" required></div>
                 <div class="col-4"><label>Trocar Foto</label><input type="file" name="foto" accept="image/*"></div>
-                
                 <div class="col-2"><label>Rua</label><input type="text" name="endereco" id="e_endereco"></div>
                 <div class="col-1"><label>Num</label><input type="text" name="numero" id="e_numero"></div>
                 <div class="col-1"><label>UF</label><input type="text" name="uf" id="e_uf"></div>
                 <div class="col-2"><label>Cidade</label><input type="text" name="municipio" id="e_municipio"></div>
                 <div class="col-2"><label>Bairro</label><input type="text" name="bairro" id="e_bairro"></div>
-                
                 <div class="col-2"><label>Telefone</label><input type="text" name="telefone" id="e_telefone"></div>
                 <div class="col-2"><label>Vendedor</label><input type="text" name="vendedor" id="e_vendedor"></div>
-
                 <input type="hidden" name="perfil" id="e_perfil">
                 <input type="hidden" name="cnpj" id="e_cnpj"><input type="hidden" name="contato_nome" id="e_contato_nome">
                 <input type="hidden" name="cep" id="e_cep"><input type="hidden" name="email" id="e_email">
                 <input type="hidden" name="instagram" id="e_instagram"><input type="hidden" name="horario_seg_sex" id="e_horario_seg_sex">
                 <input type="hidden" name="horario_sab" id="e_horario_sab"><input type="hidden" name="time_soul" id="e_time_soul">
-
                 <div class="col-4" style="margin-top:10px"><button class="btn" style="width:100%">Salvar Alterações</button></div>
             </form>
         </div>
     </div>
-
     <script>
         function toggleForm() { document.getElementById('form-container').style.display = 'block'; }
         function fechar() { document.getElementById('modalEdit').style.display = 'none'; }
@@ -493,9 +454,7 @@ HTML_ADMIN = """
         function filtrar() {
             let termo = document.getElementById('busca').value.toLowerCase();
             let trs = document.querySelectorAll('#tabela tbody tr');
-            trs.forEach(tr => {
-                tr.style.display = tr.innerText.toLowerCase().includes(termo) ? '' : 'none';
-            });
+            trs.forEach(tr => { tr.style.display = tr.innerText.toLowerCase().includes(termo) ? '' : 'none'; });
         }
     </script>
 </body>
@@ -551,7 +510,7 @@ init_db()
 
 def geocode_address(address_str):
     try:
-        geolocator = Nominatim(user_agent="soul_v5")
+        geolocator = Nominatim(user_agent="soul_v6")
         location = geolocator.geocode(address_str, timeout=10)
         if location: return location.latitude, location.longitude
     except: pass
@@ -574,38 +533,55 @@ def api_lojas():
     
     lista = [dict(ix) for ix in lojas]
 
-    # LOGICA DE DISTANCIA
     if cep_busca:
         try:
-            geolocator = Nominatim(user_agent="soul_cep_v2")
-            # Força a busca apenas no Brasil ('br')
-            location = geolocator.geocode(cep_busca, country_codes='br')
+            # ETAPA 1: TRADUZIR O CEP PARA ENDEREÇO (ViaCEP)
+            url_viacep = f"https://viacep.com.br/ws/{cep_busca}/json/"
+            req = urllib.request.Request(url_viacep, headers={'User-Agent': 'SoulApp/1.0'})
             
-            if location:
-                user_coords = (location.latitude, location.longitude)
-                lojas_proximas = []
+            with urllib.request.urlopen(req) as response:
+                dados_cep = json.loads(response.read().decode())
+                
+                if 'erro' in dados_cep:
+                    return jsonify({'erro': 'CEP não encontrado no Brasil.'})
+                
+                # ETAPA 2: ACHAR COORDENADAS DO ENDEREÇO
+                # Criamos uma string de busca segura: "Logradouro, Cidade - UF, Brazil"
+                texto_busca = f"{dados_cep['logradouro']}, {dados_cep['localidade']} - {dados_cep['uf']}, Brazil"
+                
+                geolocator = Nominatim(user_agent="soul_app_v7")
+                location = geolocator.geocode(texto_busca)
+                
+                if not location:
+                    # Se falhar a rua, tenta só a cidade
+                    texto_busca_cidade = f"{dados_cep['localidade']} - {dados_cep['uf']}, Brazil"
+                    location = geolocator.geocode(texto_busca_cidade)
 
-                for l in lista:
-                    if l['lat'] and l['lon']:
-                        store_coords = (l['lat'], l['lon'])
-                        # Calcula distância em KM
-                        dist = geodesic(user_coords, store_coords).km
-                        if dist <= 100: # Raio de 100km
-                            l['distancia'] = round(dist, 1)
-                            lojas_proximas.append(l)
-                
-                # Ordena
-                lojas_proximas.sort(key=lambda x: x['distancia'])
-                
-                return jsonify({
-                    'centro': user_coords,
-                    'lojas': lojas_proximas
-                })
-            else:
-                return jsonify({'erro': 'CEP não encontrado no Brasil.'})
+                if location:
+                    user_coords = (location.latitude, location.longitude)
+                    lojas_proximas = []
+
+                    for l in lista:
+                        if l['lat'] and l['lon']:
+                            store_coords = (l['lat'], l['lon'])
+                            dist = geodesic(user_coords, store_coords).km
+                            if dist <= 100: 
+                                l['distancia'] = round(dist, 1)
+                                lojas_proximas.append(l)
+                    
+                    lojas_proximas.sort(key=lambda x: x['distancia'])
+                    
+                    return jsonify({
+                        'centro': user_coords,
+                        'endereco_base': f"{dados_cep['localidade']} - {dados_cep['uf']}",
+                        'lojas': lojas_proximas
+                    })
+                else:
+                    return jsonify({'erro': 'Não conseguimos localizar este endereço no mapa.'})
+
         except Exception as e:
-            print(e)
-            return jsonify({'erro': 'Erro ao calcular rota.'})
+            print(f"Erro CEP: {e}")
+            return jsonify({'erro': 'Erro ao consultar CEP.'})
 
     return jsonify({'lojas': lista})
 
