@@ -5,7 +5,6 @@ import os
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 from werkzeug.utils import secure_filename
-from unicodedata import normalize
 
 app = Flask(__name__)
 
@@ -32,9 +31,9 @@ HTML_PUBLICO = """
         body { font-family: 'Segoe UI', sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #f4f6f8; color: #333; }
         h1, .subtitle { text-align: center; }
         
-        #main-map { height: 400px; width: 100%; border-radius: 12px; margin-bottom: 20px; border: 2px solid #ddd; z-index: 1; }
+        #main-map { height: 450px; width: 100%; border-radius: 12px; margin-bottom: 20px; border: 2px solid #ddd; z-index: 1; }
         
-        /* ÁREA DE BUSCA */
+        /* BUSCA */
         .search-container { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 20px; background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .input-group { display: flex; gap: 5px; flex-grow: 1; max-width: 500px; }
         input { padding: 12px; width: 100%; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
@@ -45,7 +44,7 @@ HTML_PUBLICO = """
 
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 15px; }
         
-        /* CARD (LISTA) */
+        /* CARD */
         .card { 
             background: #fff; border-radius: 12px; 
             box-shadow: 0 2px 5px rgba(0,0,0,0.05); 
@@ -78,7 +77,6 @@ HTML_PUBLICO = """
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; justify-content: center; align-items: center; }
         .modal-body { background: white; width: 95%; max-width: 1000px; height: 85vh; border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; position: relative; }
         
-        /* Botão Fechar Ajustado */
         .modal-close { 
             position: absolute; top: 10px; right: 15px; 
             font-size: 30px; line-height: 1; cursor: pointer; 
@@ -92,11 +90,9 @@ HTML_PUBLICO = """
         .modal-title { margin: 0; font-size: 1.8em; padding-right: 40px; }
         .modal-code { font-weight: bold; color: #000; background: #FFC107; padding: 2px 8px; border-radius: 4px; font-size: 0.9em; display: inline-block; margin-top: 5px; }
 
-        /* Grid Ajustado: Mapa Menor (45%) */
         .modal-content-grid { display: grid; grid-template-columns: 55% 45%; flex-grow: 1; overflow: hidden; }
         @media (max-width: 768px) { .modal-content-grid { grid-template-columns: 1fr; overflow-y: auto; } }
 
-        /* Coluna Esquerda: Info */
         .col-info { padding: 20px; overflow-y: auto; background: #fff; }
         .modal-img-banner { width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 20px; border: 1px solid #eee; }
         
@@ -104,12 +100,12 @@ HTML_PUBLICO = """
         .detail-label { font-weight: bold; color: #888; font-size: 0.75em; text-transform: uppercase; margin-bottom: 3px; }
         .detail-value { font-size: 0.95em; color: #333; line-height: 1.4; }
 
-        /* Coluna Direita: Mapa */
         .col-map { position: relative; height: 100%; background: #eee; border-left: 1px solid #ddd; }
         .modal-map { width: 100%; height: 100%; }
 
         .admin-link { display: block; text-align: right; margin-top: 20px; color: #aaa; text-decoration: none; }
         .loader { display: none; text-align: center; margin: 10px 0; color: #007bff; font-weight: bold; }
+        .aviso-filtro { display:none; background: #fff3cd; color: #856404; padding: 10px; text-align: center; border-radius: 6px; margin-bottom: 15px; }
     </style>
 </head>
 <body>
@@ -123,13 +119,14 @@ HTML_PUBLICO = """
             <input type="text" id="buscaInput" placeholder="Busque por Cidade, Estado ou Nome...">
             <button onclick="buscarTexto()">🔍 Buscar</button>
         </div>
-        <div class="input-group" style="max-width: 250px;">
+        <div class="input-group" style="max-width: 280px;">
             <input type="text" id="cepInput" placeholder="Digite seu CEP">
-            <button class="btn-cep" onclick="buscarCep()">📍 Ver Próximas</button>
+            <button class="btn-cep" onclick="buscarCep()">📍 Lojas até 100km</button>
         </div>
     </div>
     
-    <div id="loader" class="loader">Calculando distâncias...</div>
+    <div id="aviso" class="aviso-filtro">Mostrando apenas lojas num raio de 100km do seu CEP.</div>
+    <div id="loader" class="loader">Calculando rota e distâncias...</div>
     <div id="lista" class="grid"></div>
     
     <a href="/admin" class="admin-link">Area Administrativa</a>
@@ -152,29 +149,12 @@ HTML_PUBLICO = """
             <div class="modal-content-grid">
                 <div class="col-info">
                     <img id="m_foto" class="modal-img-banner" src="" style="display:none;">
-                    
-                    <div class="detail-item">
-                        <div class="detail-label">Endereço</div>
-                        <div class="detail-value" id="m_endereco"></div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Contatos</div>
-                        <div class="detail-value" id="m_contato"></div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Horário de Atendimento</div>
-                        <div class="detail-value" id="m_horario"></div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Informações Internas</div>
-                        <div class="detail-value" id="m_interno"></div>
-                    </div>
-                    <div class="detail-item" style="border:none;">
-                        <div class="detail-label">Ações Rápidas</div>
-                        <div class="detail-value" id="m_links"></div>
-                    </div>
+                    <div class="detail-item"><div class="detail-label">Endereço</div><div class="detail-value" id="m_endereco"></div></div>
+                    <div class="detail-item"><div class="detail-label">Contatos</div><div class="detail-value" id="m_contato"></div></div>
+                    <div class="detail-item"><div class="detail-label">Horário de Atendimento</div><div class="detail-value" id="m_horario"></div></div>
+                    <div class="detail-item"><div class="detail-label">Informações Internas</div><div class="detail-value" id="m_interno"></div></div>
+                    <div class="detail-item" style="border:none;"><div class="detail-label">Ações Rápidas</div><div class="detail-value" id="m_links"></div></div>
                 </div>
-
                 <div class="col-map">
                     <div id="modal-map" class="modal-map"></div>
                 </div>
@@ -187,13 +167,17 @@ HTML_PUBLICO = """
         var mainMap = L.map('main-map').setView([-14.2350, -51.9253], 4);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(mainMap);
         var markersLayer = L.layerGroup().addTo(mainMap);
+        var radiusCircle = null; // Círculo de 100km
         var modalMap = null;
         var allData = [];
 
         async function carregar() {
+            // Carrega TODAS as lojas inicialmente
             let res = await fetch('/api/lojas');
-            allData = await res.json();
+            let dados = await res.json();
+            allData = dados.lojas || []; 
             renderizar(allData);
+            document.getElementById('aviso').style.display = 'none';
         }
 
         async function buscarCep() {
@@ -204,22 +188,38 @@ HTML_PUBLICO = """
             document.getElementById('lista').style.opacity = '0.5';
 
             try {
+                // Chama a API que filtra por 100km
                 let res = await fetch('/api/lojas?cep=' + cep);
-                let dados = await res.json();
+                let resposta = await res.json();
                 
-                // Se o backend retornou erro no CEP
-                if(dados.erro) {
-                    alert(dados.erro);
+                if(resposta.erro) {
+                    alert(resposta.erro);
                 } else {
-                    allData = dados; // Atualiza dados com distância
-                    renderizar(allData);
+                    // Atualiza a lista apenas com as lojas filtradas
+                    let lojasFiltradas = resposta.lojas;
+                    let centro = resposta.centro;
+
+                    renderizar(lojasFiltradas);
                     
-                    // Foca o mapa na primeira loja (mais próxima)
-                    if(allData.length > 0 && allData[0].lat) {
-                        mainMap.setView([allData[0].lat, allData[0].lon], 9);
+                    document.getElementById('aviso').style.display = 'block';
+                    document.getElementById('aviso').innerText = `Encontramos ${lojasFiltradas.length} lojas num raio de 100km do CEP ${cep}.`;
+
+                    // ZOOM NO ESTADO/REGIAO
+                    if(centro) {
+                        mainMap.setView([centro[0], centro[1]], 8); // Zoom 8 é bom para visualizar raio de 100km
+                        
+                        // Desenha círculo de 100km
+                        if(radiusCircle) mainMap.removeLayer(radiusCircle);
+                        radiusCircle = L.circle([centro[0], centro[1]], {
+                            color: 'blue',
+                            fillColor: '#blue',
+                            fillOpacity: 0.1,
+                            radius: 100000 // 100km em metros
+                        }).addTo(mainMap);
                     }
                 }
             } catch (e) {
+                console.error(e);
                 alert("Erro ao buscar CEP.");
             } finally {
                 document.getElementById('loader').style.display = 'none';
@@ -228,14 +228,28 @@ HTML_PUBLICO = """
         }
 
         function buscarTexto() {
+            // Limpa o círculo de CEP se houver
+            if(radiusCircle) { mainMap.removeLayer(radiusCircle); radiusCircle = null; }
+            document.getElementById('aviso').style.display = 'none';
+
             let termo = document.getElementById('buscaInput').value.toLowerCase();
-            // Recarrega original se estiver vazio para limpar distâncias antigas
+            
+            // Se estiver vazio, recarrega tudo do backend para garantir
             if(!termo) { carregar(); return; }
 
-            let filtrados = allData.filter(l => 
-                (l.nome + ' ' + l.municipio + ' ' + l.uf).toLowerCase().includes(termo)
-            );
-            renderizar(filtrados);
+            // Filtra localmente na lista atual (ou recarrega tudo se preferir)
+            // Aqui vamos recarregar tudo para tirar o filtro de 100km se o usuário quiser buscar por nome
+            fetch('/api/lojas').then(r => r.json()).then(d => {
+                let todas = d.lojas;
+                let filtrados = todas.filter(l => 
+                    (l.nome + ' ' + l.municipio + ' ' + l.uf).toLowerCase().includes(termo)
+                );
+                renderizar(filtrados);
+                // Se tiver resultado, foca no primeiro
+                if(filtrados.length > 0 && filtrados[0].lat) {
+                    mainMap.setView([filtrados[0].lat, filtrados[0].lon], 6);
+                }
+            });
         }
 
         function pegarIniciais(nome) {
@@ -249,36 +263,36 @@ HTML_PUBLICO = """
             markersLayer.clearLayers();
             let html = '';
             
-            if (lojas.length === 0) html = '<p style="text-align:center; grid-column:1/-1;">Nenhuma loja encontrada.</p>';
+            if (!lojas || lojas.length === 0) html = '<p style="text-align:center; grid-column:1/-1;">Nenhuma loja encontrada nesta região.</p>';
+            else {
+                lojas.forEach(l => {
+                    if(l.lat && l.lon) {
+                        let m = L.marker([l.lat, l.lon]).bindPopup(`<b>${l.nome}</b>`);
+                        m.on('click', () => abrirModal(l));
+                        markersLayer.addLayer(m);
+                    }
 
-            lojas.forEach(l => {
-                if(l.lat && l.lon) {
-                    let m = L.marker([l.lat, l.lon]).bindPopup(`<b>${l.nome}</b>`);
-                    m.on('click', () => abrirModal(l));
-                    markersLayer.addLayer(m);
-                }
+                    let imagemHtml = l.foto ? 
+                        `<img src="/static/uploads/${l.foto}" class="card-img">` : 
+                        `<div class="card-initials">${pegarIniciais(l.nome)}</div>`;
+                    
+                    let distHtml = l.distancia ? 
+                        `<div class="distancia-badge">📍 A ${l.distancia} km de você</div>` : '';
 
-                let imagemHtml = l.foto ? 
-                    `<img src="/static/uploads/${l.foto}" class="card-img">` : 
-                    `<div class="card-initials">${pegarIniciais(l.nome)}</div>`;
-                
-                // Badge de distância (se existir)
-                let distHtml = l.distancia ? 
-                    `<div class="distancia-badge">📍 A ${l.distancia} km de você</div>` : '';
-
-                html += `
-                <div class="card" onclick='abrirModal(${JSON.stringify(l)})'>
-                    <div class="card-img-box">${imagemHtml}</div>
-                    <div class="card-content">
-                        <div class="card-header">
-                            <h3>${l.nome}</h3>
-                            <span class="badge">${l.perfil || 'Loja'}</span>
+                    html += `
+                    <div class="card" onclick='abrirModal(${JSON.stringify(l)})'>
+                        <div class="card-img-box">${imagemHtml}</div>
+                        <div class="card-content">
+                            <div class="card-header">
+                                <h3>${l.nome}</h3>
+                                <span class="badge">${l.perfil || 'Loja'}</span>
+                            </div>
+                            <div class="info-row">📍 ${l.municipio} - ${l.uf}</div>
+                            ${distHtml}
                         </div>
-                        <div class="info-row">📍 ${l.municipio} - ${l.uf}</div>
-                        ${distHtml}
-                    </div>
-                </div>`;
-            });
+                    </div>`;
+                });
+            }
             document.getElementById('lista').innerHTML = html;
         }
 
@@ -338,7 +352,6 @@ HTML_PUBLICO = """
             }
         }
         
-        // Enter nos inputs
         document.getElementById("buscaInput").addEventListener("keypress", function(event) { if (event.key === "Enter") buscarTexto(); });
         document.getElementById("cepInput").addEventListener("keypress", function(event) { if (event.key === "Enter") buscarCep(); });
 
@@ -348,7 +361,7 @@ HTML_PUBLICO = """
 </html>
 """
 
-# --- HTML ADMIN ---
+# --- HTML ADMIN (Mantido igual) ---
 HTML_ADMIN = """
 <!DOCTYPE html>
 <html>
@@ -562,30 +575,37 @@ def api_lojas():
     
     lista = [dict(ix) for ix in lojas]
 
+    # FILTRO POR CEP E DISTÂNCIA
     if cep_busca:
         try:
             geolocator = Nominatim(user_agent="soul_cep")
             location = geolocator.geocode(f"{cep_busca}, Brazil")
             if location:
                 user_coords = (location.latitude, location.longitude)
-                
-                # Calcula distância para cada loja
+                lojas_proximas = []
+
                 for l in lista:
                     if l['lat'] and l['lon']:
                         store_coords = (l['lat'], l['lon'])
-                        l['distancia'] = round(geodesic(user_coords, store_coords).km, 1)
-                    else:
-                        l['distancia'] = 99999 # Joga pro final se não tiver GPS
+                        dist = geodesic(user_coords, store_coords).km
+                        if dist <= 100: # Filtro de 100 KM
+                            l['distancia'] = round(dist, 1)
+                            lojas_proximas.append(l)
                 
-                # Ordena pela distância
-                lista.sort(key=lambda x: x['distancia'])
-                return jsonify(lista)
+                # Ordena da mais perto para a mais longe
+                lojas_proximas.sort(key=lambda x: x['distancia'])
+                
+                return jsonify({
+                    'centro': user_coords,
+                    'lojas': lojas_proximas
+                })
             else:
                 return jsonify({'erro': 'CEP não encontrado no mapa.'})
-        except:
-             return jsonify({'erro': 'Erro ao calcular rota.'})
+        except Exception as e:
+            print(e)
+            return jsonify({'erro': 'Erro ao calcular rota.'})
 
-    return jsonify(lista)
+    return jsonify({'lojas': lista})
 
 @app.route('/admin')
 def admin():
