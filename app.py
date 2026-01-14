@@ -3,7 +3,9 @@ import sqlite3
 import csv
 import os
 from geopy.geocoders import Nominatim
+from geopy.distance import geodesic
 from werkzeug.utils import secure_filename
+from unicodedata import normalize
 
 app = Flask(__name__)
 
@@ -32,10 +34,15 @@ HTML_PUBLICO = """
         
         #main-map { height: 400px; width: 100%; border-radius: 12px; margin-bottom: 20px; border: 2px solid #ddd; z-index: 1; }
         
-        .search-box { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
-        input { padding: 12px; width: 60%; border: 1px solid #ccc; border-radius: 6px; }
-        button { padding: 12px 25px; cursor: pointer; background: #000; color: #fff; border: none; border-radius: 6px; font-weight: bold; }
-        
+        /* ÁREA DE BUSCA */
+        .search-container { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 20px; background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .input-group { display: flex; gap: 5px; flex-grow: 1; max-width: 500px; }
+        input { padding: 12px; width: 100%; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
+        button { padding: 12px 20px; cursor: pointer; background: #000; color: #fff; border: none; border-radius: 6px; font-weight: bold; white-space: nowrap; transition: background 0.2s; }
+        button:hover { background: #333; }
+        button.btn-cep { background: #007bff; }
+        button.btn-cep:hover { background: #0056b3; }
+
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 15px; }
         
         /* CARD (LISTA) */
@@ -44,13 +51,13 @@ HTML_PUBLICO = """
             box-shadow: 0 2px 5px rgba(0,0,0,0.05); 
             cursor: pointer; transition: transform 0.2s; 
             display: flex; align-items: center; 
-            padding: 15px; gap: 15px; border: 1px solid #eee;
+            padding: 15px; gap: 15px; border: 1px solid #eee; position: relative;
         }
         .card:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); border-color: #000; }
         
         .card-img-box { 
             width: 60px; height: 60px; flex-shrink: 0; 
-            border-radius: 50%; overflow: hidden; /* Redondo estilo avatar */
+            border-radius: 50%; overflow: hidden; 
             background: #f0f0f0; display: flex; justify-content: center; align-items: center; border: 1px solid #ddd;
         }
         .card-img { width: 100%; height: 100%; object-fit: cover; }
@@ -61,20 +68,35 @@ HTML_PUBLICO = """
         .card h3 { margin: 0; font-size: 1.1em; color: #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .badge { background: #eee; padding: 2px 6px; font-size: 0.7em; font-weight: bold; border-radius: 4px; color: #666; text-transform: uppercase; }
         .info-row { font-size: 0.9em; color: #666; }
+        
+        .distancia-badge {
+            background: #e3f2fd; color: #0d47a1; font-weight: bold; font-size: 0.85em;
+            padding: 4px 8px; border-radius: 4px; margin-top: 5px; display: inline-block;
+        }
 
         /* MODAL */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; justify-content: center; align-items: center; }
-        .modal-body { background: white; width: 95%; max-width: 950px; height: 85vh; border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; position: relative; }
-        .modal-close { position: absolute; top: 15px; right: 20px; font-size: 28px; cursor: pointer; background: none; border: none; font-weight: bold; color: #333; z-index: 10; }
+        .modal-body { background: white; width: 95%; max-width: 1000px; height: 85vh; border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; position: relative; }
         
-        .modal-header-area { padding: 20px 20px 10px 20px; background: #fafafa; border-bottom: 1px solid #eee; }
-        .modal-title { margin: 0; font-size: 1.8em; }
+        /* Botão Fechar Ajustado */
+        .modal-close { 
+            position: absolute; top: 10px; right: 15px; 
+            font-size: 30px; line-height: 1; cursor: pointer; 
+            background: #fff; border: none; font-weight: bold; color: #333; 
+            z-index: 20; padding: 5px; border-radius: 50%; width: 40px; height: 40px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .modal-close:hover { background: #f0f0f0; color: red; }
+        
+        .modal-header-area { padding: 30px 20px 15px 20px; background: #fafafa; border-bottom: 1px solid #eee; }
+        .modal-title { margin: 0; font-size: 1.8em; padding-right: 40px; }
         .modal-code { font-weight: bold; color: #000; background: #FFC107; padding: 2px 8px; border-radius: 4px; font-size: 0.9em; display: inline-block; margin-top: 5px; }
 
-        .modal-content-grid { display: grid; grid-template-columns: 40% 60%; flex-grow: 1; overflow: hidden; }
+        /* Grid Ajustado: Mapa Menor (45%) */
+        .modal-content-grid { display: grid; grid-template-columns: 55% 45%; flex-grow: 1; overflow: hidden; }
         @media (max-width: 768px) { .modal-content-grid { grid-template-columns: 1fr; overflow-y: auto; } }
 
-        /* Coluna Esquerda: Foto + Infos */
+        /* Coluna Esquerda: Info */
         .col-info { padding: 20px; overflow-y: auto; background: #fff; }
         .modal-img-banner { width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 20px; border: 1px solid #eee; }
         
@@ -83,10 +105,11 @@ HTML_PUBLICO = """
         .detail-value { font-size: 0.95em; color: #333; line-height: 1.4; }
 
         /* Coluna Direita: Mapa */
-        .col-map { position: relative; height: 100%; min-height: 300px; }
+        .col-map { position: relative; height: 100%; background: #eee; border-left: 1px solid #ddd; }
         .modal-map { width: 100%; height: 100%; }
 
         .admin-link { display: block; text-align: right; margin-top: 20px; color: #aaa; text-decoration: none; }
+        .loader { display: none; text-align: center; margin: 10px 0; color: #007bff; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -95,11 +118,18 @@ HTML_PUBLICO = """
     
     <div id="main-map"></div>
 
-    <div class="search-box">
-        <input type="text" id="buscaInput" placeholder="Busque por cidade, estado ou nome...">
-        <button onclick="buscar()">Filtrar</button>
+    <div class="search-container">
+        <div class="input-group">
+            <input type="text" id="buscaInput" placeholder="Busque por Cidade, Estado ou Nome...">
+            <button onclick="buscarTexto()">🔍 Buscar</button>
+        </div>
+        <div class="input-group" style="max-width: 250px;">
+            <input type="text" id="cepInput" placeholder="Digite seu CEP">
+            <button class="btn-cep" onclick="buscarCep()">📍 Ver Próximas</button>
+        </div>
     </div>
     
+    <div id="loader" class="loader">Calculando distâncias...</div>
     <div id="lista" class="grid"></div>
     
     <a href="/admin" class="admin-link">Area Administrativa</a>
@@ -109,11 +139,13 @@ HTML_PUBLICO = """
             <button class="modal-close" onclick="fecharModal()">×</button>
             
             <div class="modal-header-area">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <h2 class="modal-title" id="m_nome">Nome da Loja</h2>
-                    <span class="badge" id="m_perfil">PERFIL</span>
+                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                    <div>
+                        <h2 class="modal-title" id="m_nome">Nome da Loja</h2>
+                        <div id="m_codigo_area"></div>
+                    </div>
+                    <span class="badge" id="m_perfil" style="font-size: 0.9em; margin-top: 5px;">PERFIL</span>
                 </div>
-                <div id="m_codigo_area"></div>
                 <div id="m_local" style="color:#666; margin-top:5px;">Cidade - UF</div>
             </div>
 
@@ -164,6 +196,48 @@ HTML_PUBLICO = """
             renderizar(allData);
         }
 
+        async function buscarCep() {
+            let cep = document.getElementById('cepInput').value.replace(/\D/g, '');
+            if (cep.length !== 8) { alert("Digite um CEP válido (8 números)"); return; }
+
+            document.getElementById('loader').style.display = 'block';
+            document.getElementById('lista').style.opacity = '0.5';
+
+            try {
+                let res = await fetch('/api/lojas?cep=' + cep);
+                let dados = await res.json();
+                
+                // Se o backend retornou erro no CEP
+                if(dados.erro) {
+                    alert(dados.erro);
+                } else {
+                    allData = dados; // Atualiza dados com distância
+                    renderizar(allData);
+                    
+                    // Foca o mapa na primeira loja (mais próxima)
+                    if(allData.length > 0 && allData[0].lat) {
+                        mainMap.setView([allData[0].lat, allData[0].lon], 9);
+                    }
+                }
+            } catch (e) {
+                alert("Erro ao buscar CEP.");
+            } finally {
+                document.getElementById('loader').style.display = 'none';
+                document.getElementById('lista').style.opacity = '1';
+            }
+        }
+
+        function buscarTexto() {
+            let termo = document.getElementById('buscaInput').value.toLowerCase();
+            // Recarrega original se estiver vazio para limpar distâncias antigas
+            if(!termo) { carregar(); return; }
+
+            let filtrados = allData.filter(l => 
+                (l.nome + ' ' + l.municipio + ' ' + l.uf).toLowerCase().includes(termo)
+            );
+            renderizar(filtrados);
+        }
+
         function pegarIniciais(nome) {
             if(!nome) return "SL";
             let partes = nome.trim().split(" ");
@@ -175,6 +249,8 @@ HTML_PUBLICO = """
             markersLayer.clearLayers();
             let html = '';
             
+            if (lojas.length === 0) html = '<p style="text-align:center; grid-column:1/-1;">Nenhuma loja encontrada.</p>';
+
             lojas.forEach(l => {
                 if(l.lat && l.lon) {
                     let m = L.marker([l.lat, l.lon]).bindPopup(`<b>${l.nome}</b>`);
@@ -182,13 +258,14 @@ HTML_PUBLICO = """
                     markersLayer.addLayer(m);
                 }
 
-                let imagemHtml = '';
-                if (l.foto) {
-                    imagemHtml = `<img src="/static/uploads/${l.foto}" class="card-img">`;
-                } else {
-                    imagemHtml = `<div class="card-initials">${pegarIniciais(l.nome)}</div>`;
-                }
+                let imagemHtml = l.foto ? 
+                    `<img src="/static/uploads/${l.foto}" class="card-img">` : 
+                    `<div class="card-initials">${pegarIniciais(l.nome)}</div>`;
                 
+                // Badge de distância (se existir)
+                let distHtml = l.distancia ? 
+                    `<div class="distancia-badge">📍 A ${l.distancia} km de você</div>` : '';
+
                 html += `
                 <div class="card" onclick='abrirModal(${JSON.stringify(l)})'>
                     <div class="card-img-box">${imagemHtml}</div>
@@ -198,7 +275,8 @@ HTML_PUBLICO = """
                             <span class="badge">${l.perfil || 'Loja'}</span>
                         </div>
                         <div class="info-row">📍 ${l.municipio} - ${l.uf}</div>
-                        </div>
+                        ${distHtml}
+                    </div>
                 </div>`;
             });
             document.getElementById('lista').innerHTML = html;
@@ -209,10 +287,8 @@ HTML_PUBLICO = """
             document.getElementById('m_perfil').innerText = l.perfil;
             document.getElementById('m_local').innerText = `${l.municipio} - ${l.uf}`;
             
-            // CÓDIGO DA LOJA EM DESTAQUE
             let codigoHtml = l.codigo ? `<span class="modal-code">CÓD: ${l.codigo}</span>` : '';
             document.getElementById('m_codigo_area').innerHTML = codigoHtml;
-
             document.getElementById('m_endereco').innerText = `${l.endereco}, ${l.numero} - ${l.bairro || ''} (CEP: ${l.cep || ''})`;
             
             let contatoHtml = "";
@@ -233,14 +309,9 @@ HTML_PUBLICO = """
             if(l.instagram) linksHtml += `<a href="https://instagram.com/${l.instagram.replace('@','').replace('/','')}" target="_blank" style="color:#E1306C; font-weight:bold; text-decoration:none;">📸 Instagram</a>`;
             document.getElementById('m_links').innerHTML = linksHtml;
 
-            // FOTO AGORA FICA NA ESQUERDA
             let img = document.getElementById('m_foto');
-            if(l.foto) {
-                img.src = "/static/uploads/" + l.foto;
-                img.style.display = "block";
-            } else {
-                img.style.display = "none";
-            }
+            if(l.foto) { img.src = "/static/uploads/" + l.foto; img.style.display = "block"; } 
+            else { img.style.display = "none"; }
 
             document.getElementById('modalDetalhes').style.display = 'flex';
 
@@ -256,6 +327,7 @@ HTML_PUBLICO = """
                     modalMap.invalidateSize();
                 } else {
                     modalMap.setView([-14.23, -51.92], 4);
+                    modalMap.invalidateSize();
                 }
             }, 200);
         }
@@ -265,14 +337,11 @@ HTML_PUBLICO = """
                 document.getElementById('modalDetalhes').style.display = 'none';
             }
         }
+        
+        // Enter nos inputs
+        document.getElementById("buscaInput").addEventListener("keypress", function(event) { if (event.key === "Enter") buscarTexto(); });
+        document.getElementById("cepInput").addEventListener("keypress", function(event) { if (event.key === "Enter") buscarCep(); });
 
-        function buscar() {
-            let termo = document.getElementById('buscaInput').value.toLowerCase();
-            let filtrados = allData.filter(l => 
-                (l.nome + ' ' + l.municipio + ' ' + l.uf).toLowerCase().includes(termo)
-            );
-            renderizar(filtrados);
-        }
         carregar();
     </script>
 </body>
@@ -486,10 +555,37 @@ def home():
 
 @app.route('/api/lojas')
 def api_lojas():
+    cep_busca = request.args.get('cep')
     conn = get_db()
     lojas = conn.execute('SELECT * FROM lojas').fetchall()
     conn.close()
-    return jsonify([dict(ix) for ix in lojas])
+    
+    lista = [dict(ix) for ix in lojas]
+
+    if cep_busca:
+        try:
+            geolocator = Nominatim(user_agent="soul_cep")
+            location = geolocator.geocode(f"{cep_busca}, Brazil")
+            if location:
+                user_coords = (location.latitude, location.longitude)
+                
+                # Calcula distância para cada loja
+                for l in lista:
+                    if l['lat'] and l['lon']:
+                        store_coords = (l['lat'], l['lon'])
+                        l['distancia'] = round(geodesic(user_coords, store_coords).km, 1)
+                    else:
+                        l['distancia'] = 99999 # Joga pro final se não tiver GPS
+                
+                # Ordena pela distância
+                lista.sort(key=lambda x: x['distancia'])
+                return jsonify(lista)
+            else:
+                return jsonify({'erro': 'CEP não encontrado no mapa.'})
+        except:
+             return jsonify({'erro': 'Erro ao calcular rota.'})
+
+    return jsonify(lista)
 
 @app.route('/admin')
 def admin():
