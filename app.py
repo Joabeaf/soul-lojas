@@ -3,7 +3,6 @@ import sqlite3
 import csv
 import os
 from geopy.geocoders import Nominatim
-from unicodedata import normalize
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
@@ -28,7 +27,7 @@ HTML_PUBLICO = """
     <title>Rede Autorizada Soul</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { font-family: 'Segoe UI', sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #f4f6f8; }
+        body { font-family: 'Segoe UI', sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #f4f6f8; color: #333; }
         h1, .subtitle { text-align: center; }
         
         #main-map { height: 400px; width: 100%; border-radius: 12px; margin-bottom: 20px; border: 2px solid #ddd; z-index: 1; }
@@ -39,71 +38,54 @@ HTML_PUBLICO = """
         
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 15px; }
         
-        /* NOVO DESIGN DO CARTÃO */
+        /* CARD (LISTA) */
         .card { 
-            background: #fff; 
-            border-radius: 12px; 
+            background: #fff; border-radius: 12px; 
             box-shadow: 0 2px 5px rgba(0,0,0,0.05); 
-            cursor: pointer; 
-            transition: transform 0.2s; 
-            display: flex; /* Layout lado a lado */
-            align-items: center;
-            overflow: hidden;
-            border: 1px solid #eee;
-            padding: 15px;
-            gap: 15px;
+            cursor: pointer; transition: transform 0.2s; 
+            display: flex; align-items: center; 
+            padding: 15px; gap: 15px; border: 1px solid #eee;
         }
         .card:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); border-color: #000; }
         
-        /* Quadrado da Foto */
         .card-img-box { 
-            width: 70px; 
-            height: 70px; 
-            flex-shrink: 0; 
-            border-radius: 8px; 
-            overflow: hidden; 
-            background: #f0f0f0; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
+            width: 60px; height: 60px; flex-shrink: 0; 
+            border-radius: 50%; overflow: hidden; /* Redondo estilo avatar */
+            background: #f0f0f0; display: flex; justify-content: center; align-items: center; border: 1px solid #ddd;
         }
         .card-img { width: 100%; height: 100%; object-fit: cover; }
-        
-        /* Letras (Iniciais) quando não tem foto */
-        .card-initials { 
-            font-size: 1.5em; 
-            font-weight: bold; 
-            color: #555; 
-            text-transform: uppercase; 
-        }
+        .card-initials { font-size: 1.2em; font-weight: bold; color: #555; text-transform: uppercase; }
 
-        /* Conteúdo do Texto */
         .card-content { flex-grow: 1; min-width: 0; }
-        
-        .card-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 5px; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
         .card h3 { margin: 0; font-size: 1.1em; color: #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .badge { background: #eee; padding: 2px 6px; font-size: 0.7em; font-weight: bold; border-radius: 4px; color: #666; text-transform: uppercase; }
-        
-        .info-row { font-size: 0.85em; color: #666; margin-bottom: 2px; }
-        .info-row.contact { color: #888; margin-top: 5px; font-size: 0.8em; }
+        .info-row { font-size: 0.9em; color: #666; }
 
-        /* MODAL (Janela Flutuante) */
+        /* MODAL */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; justify-content: center; align-items: center; }
-        .modal-body { background: white; width: 90%; max-width: 900px; max-height: 90vh; overflow-y: auto; border-radius: 10px; position: relative; }
-        .modal-close { position: absolute; top: 15px; right: 20px; font-size: 24px; cursor: pointer; background: none; border: none; font-weight: bold; color: #333; z-index: 10; }
+        .modal-body { background: white; width: 95%; max-width: 950px; height: 85vh; border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+        .modal-close { position: absolute; top: 15px; right: 20px; font-size: 28px; cursor: pointer; background: none; border: none; font-weight: bold; color: #333; z-index: 10; }
         
-        .modal-content-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 20px; }
-        @media (max-width: 700px) { .modal-content-grid { grid-template-columns: 1fr; } }
-
-        .modal-img { width: 100%; height: 300px; object-fit: cover; border-radius: 8px; background: #eee; margin-bottom: 20px; }
-        .modal-map { width: 100%; height: 250px; border-radius: 8px; border: 1px solid #ddd; }
-        
-        .modal-header { padding: 20px; border-bottom: 1px solid #eee; background: #fafafa; }
+        .modal-header-area { padding: 20px 20px 10px 20px; background: #fafafa; border-bottom: 1px solid #eee; }
         .modal-title { margin: 0; font-size: 1.8em; }
+        .modal-code { font-weight: bold; color: #000; background: #FFC107; padding: 2px 8px; border-radius: 4px; font-size: 0.9em; display: inline-block; margin-top: 5px; }
+
+        .modal-content-grid { display: grid; grid-template-columns: 40% 60%; flex-grow: 1; overflow: hidden; }
+        @media (max-width: 768px) { .modal-content-grid { grid-template-columns: 1fr; overflow-y: auto; } }
+
+        /* Coluna Esquerda: Foto + Infos */
+        .col-info { padding: 20px; overflow-y: auto; background: #fff; }
+        .modal-img-banner { width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 20px; border: 1px solid #eee; }
         
-        .detail-item { margin-bottom: 12px; border-bottom: 1px solid #f9f9f9; padding-bottom: 5px; }
-        .detail-label { font-weight: bold; color: #888; font-size: 0.8em; text-transform: uppercase; }
-        
+        .detail-item { margin-bottom: 15px; border-bottom: 1px solid #f5f5f5; padding-bottom: 5px; }
+        .detail-label { font-weight: bold; color: #888; font-size: 0.75em; text-transform: uppercase; margin-bottom: 3px; }
+        .detail-value { font-size: 0.95em; color: #333; line-height: 1.4; }
+
+        /* Coluna Direita: Mapa */
+        .col-map { position: relative; height: 100%; min-height: 300px; }
+        .modal-map { width: 100%; height: 100%; }
+
         .admin-link { display: block; text-align: right; margin-top: 20px; color: #aaa; text-decoration: none; }
     </style>
 </head>
@@ -126,22 +108,42 @@ HTML_PUBLICO = """
         <div class="modal-body" onclick="event.stopPropagation()">
             <button class="modal-close" onclick="fecharModal()">×</button>
             
-            <div class="modal-header">
-                <span class="badge" id="m_perfil" style="float:none; font-size:1em;"></span>
-                <h2 class="modal-title" id="m_nome">Nome</h2>
-                <div id="m_local" style="color:#666">Cidade - UF</div>
+            <div class="modal-header-area">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h2 class="modal-title" id="m_nome">Nome da Loja</h2>
+                    <span class="badge" id="m_perfil">PERFIL</span>
+                </div>
+                <div id="m_codigo_area"></div>
+                <div id="m_local" style="color:#666; margin-top:5px;">Cidade - UF</div>
             </div>
 
             <div class="modal-content-grid">
-                <div>
-                    <div class="detail-item"><div class="detail-label">Endereço</div><div id="m_endereco"></div></div>
-                    <div class="detail-item"><div class="detail-label">Contato</div><div id="m_contato"></div></div>
-                    <div class="detail-item"><div class="detail-label">Horários</div><div id="m_horario"></div></div>
-                    <div class="detail-item"><div class="detail-label">Interno</div><div id="m_interno"></div></div>
-                    <div class="detail-item"><div class="detail-label">Ações</div><div id="m_links"></div></div>
+                <div class="col-info">
+                    <img id="m_foto" class="modal-img-banner" src="" style="display:none;">
+                    
+                    <div class="detail-item">
+                        <div class="detail-label">Endereço</div>
+                        <div class="detail-value" id="m_endereco"></div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Contatos</div>
+                        <div class="detail-value" id="m_contato"></div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Horário de Atendimento</div>
+                        <div class="detail-value" id="m_horario"></div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Informações Internas</div>
+                        <div class="detail-value" id="m_interno"></div>
+                    </div>
+                    <div class="detail-item" style="border:none;">
+                        <div class="detail-label">Ações Rápidas</div>
+                        <div class="detail-value" id="m_links"></div>
+                    </div>
                 </div>
-                <div>
-                    <img id="m_foto" class="modal-img" src="" style="display:none;">
+
+                <div class="col-map">
                     <div id="modal-map" class="modal-map"></div>
                 </div>
             </div>
@@ -163,7 +165,7 @@ HTML_PUBLICO = """
         }
 
         function pegarIniciais(nome) {
-            if(!nome) return "SL"; // Soul Lojas
+            if(!nome) return "SL";
             let partes = nome.trim().split(" ");
             if (partes.length === 1) return partes[0].substring(0, 2).toUpperCase();
             return (partes[0][0] + partes[1][0]).toUpperCase();
@@ -180,28 +182,23 @@ HTML_PUBLICO = """
                     markersLayer.addLayer(m);
                 }
 
-                // Lógica da Imagem ou Iniciais
                 let imagemHtml = '';
                 if (l.foto) {
                     imagemHtml = `<img src="/static/uploads/${l.foto}" class="card-img">`;
                 } else {
-                    let iniciais = pegarIniciais(l.nome);
-                    imagemHtml = `<div class="card-initials">${iniciais}</div>`;
+                    imagemHtml = `<div class="card-initials">${pegarIniciais(l.nome)}</div>`;
                 }
                 
                 html += `
                 <div class="card" onclick='abrirModal(${JSON.stringify(l)})'>
-                    <div class="card-img-box">
-                        ${imagemHtml}
-                    </div>
+                    <div class="card-img-box">${imagemHtml}</div>
                     <div class="card-content">
                         <div class="card-header">
                             <h3>${l.nome}</h3>
                             <span class="badge">${l.perfil || 'Loja'}</span>
                         </div>
                         <div class="info-row">📍 ${l.municipio} - ${l.uf}</div>
-                        <div class="info-row contact">📞 ${l.telefone || ''}</div>
-                    </div>
+                        </div>
                 </div>`;
             });
             document.getElementById('lista').innerHTML = html;
@@ -211,12 +208,17 @@ HTML_PUBLICO = """
             document.getElementById('m_nome').innerText = l.nome;
             document.getElementById('m_perfil').innerText = l.perfil;
             document.getElementById('m_local').innerText = `${l.municipio} - ${l.uf}`;
+            
+            // CÓDIGO DA LOJA EM DESTAQUE
+            let codigoHtml = l.codigo ? `<span class="modal-code">CÓD: ${l.codigo}</span>` : '';
+            document.getElementById('m_codigo_area').innerHTML = codigoHtml;
+
             document.getElementById('m_endereco').innerText = `${l.endereco}, ${l.numero} - ${l.bairro || ''} (CEP: ${l.cep || ''})`;
             
             let contatoHtml = "";
             if(l.telefone) contatoHtml += `Tel: ${l.telefone}<br>`;
             if(l.email) contatoHtml += `Email: ${l.email}<br>`;
-            if(l.contato) contatoHtml += `Resp: ${l.contato}`;
+            if(l.contato) contatoHtml += `Responsável: ${l.contato}`;
             document.getElementById('m_contato').innerHTML = contatoHtml || "-";
 
             let horaHtml = "";
@@ -227,10 +229,11 @@ HTML_PUBLICO = """
             document.getElementById('m_interno').innerText = `Vendedor: ${l.vendedor || '-'} | Time: ${l.time_soul || '-'}`;
 
             let linksHtml = "";
-            if(l.telefone) linksHtml += `<a href="https://wa.me/55${l.telefone.replace(/\D/g,'')}" target="_blank" style="color:green; font-weight:bold; margin-right:10px;">WhatsApp</a>`;
-            if(l.instagram) linksHtml += `<a href="https://instagram.com/${l.instagram.replace('@','').replace('/','')}" target="_blank" style="color:#E1306C; font-weight:bold;">Instagram</a>`;
+            if(l.telefone) linksHtml += `<a href="https://wa.me/55${l.telefone.replace(/\D/g,'')}" target="_blank" style="color:green; font-weight:bold; margin-right:15px; text-decoration:none;">📲 WhatsApp</a>`;
+            if(l.instagram) linksHtml += `<a href="https://instagram.com/${l.instagram.replace('@','').replace('/','')}" target="_blank" style="color:#E1306C; font-weight:bold; text-decoration:none;">📸 Instagram</a>`;
             document.getElementById('m_links').innerHTML = linksHtml;
 
+            // FOTO AGORA FICA NA ESQUERDA
             let img = document.getElementById('m_foto');
             if(l.foto) {
                 img.src = "/static/uploads/" + l.foto;
@@ -346,10 +349,11 @@ HTML_ADMIN = """
         <input type="text" id="busca" onkeyup="filtrar()" placeholder="🔍 Pesquisar..." style="width:100%; padding:10px; margin-bottom:10px;">
 
         <table id="tabela">
-            <thead><tr><th>Loja</th><th>Local</th><th>Foto</th><th>Ações</th></tr></thead>
+            <thead><tr><th>Cód</th><th>Loja</th><th>Local</th><th>Foto</th><th>Ações</th></tr></thead>
             <tbody>
                 {% for loja in lojas %}
                 <tr>
+                    <td>{{ loja['codigo'] }}</td>
                     <td><b>{{ loja['nome'] }}</b><br><small>{{ loja['perfil'] }}</small></td>
                     <td>{{ loja['municipio'] }}-{{ loja['uf'] }}</td>
                     <td>{% if loja['foto'] %}✅{% else %}❌{% endif %}</td>
@@ -370,17 +374,20 @@ HTML_ADMIN = """
             <form action="/admin/update" method="POST" enctype="multipart/form-data" class="form-grid">
                 <input type="hidden" name="id" id="e_id">
                 
-                <div class="col-4"><label>Nome</label><input type="text" name="nome" id="e_nome" required></div>
+                <div class="col-2"><label>Código</label><input type="text" name="codigo" id="e_codigo"></div>
+                <div class="col-2"><label>Nome</label><input type="text" name="nome" id="e_nome" required></div>
                 <div class="col-4"><label>Trocar Foto</label><input type="file" name="foto" accept="image/*"></div>
+                
                 <div class="col-2"><label>Rua</label><input type="text" name="endereco" id="e_endereco"></div>
                 <div class="col-1"><label>Num</label><input type="text" name="numero" id="e_numero"></div>
                 <div class="col-1"><label>UF</label><input type="text" name="uf" id="e_uf"></div>
                 <div class="col-2"><label>Cidade</label><input type="text" name="municipio" id="e_municipio"></div>
                 <div class="col-2"><label>Bairro</label><input type="text" name="bairro" id="e_bairro"></div>
+                
                 <div class="col-2"><label>Telefone</label><input type="text" name="telefone" id="e_telefone"></div>
                 <div class="col-2"><label>Vendedor</label><input type="text" name="vendedor" id="e_vendedor"></div>
 
-                <input type="hidden" name="perfil" id="e_perfil"><input type="hidden" name="codigo" id="e_codigo">
+                <input type="hidden" name="perfil" id="e_perfil">
                 <input type="hidden" name="cnpj" id="e_cnpj"><input type="hidden" name="contato_nome" id="e_contato_nome">
                 <input type="hidden" name="cep" id="e_cep"><input type="hidden" name="email" id="e_email">
                 <input type="hidden" name="instagram" id="e_instagram"><input type="hidden" name="horario_seg_sex" id="e_horario_seg_sex">
@@ -436,7 +443,6 @@ def init_db():
             lat REAL, lon REAL, foto TEXT
         )
     ''')
-    # Import CSV se vazio
     if conn.execute('SELECT count(*) FROM lojas').fetchone()[0] == 0 and os.path.exists('dados.csv'):
         try:
             with open('dados.csv', mode='r', encoding='utf-8-sig') as f:
@@ -525,8 +531,8 @@ def update_loja():
     endereco_completo = f"{f['endereco']}, {f['numero']} - {f['municipio']}, {f['uf']}, Brazil"
     lat, lon = geocode_address(endereco_completo)
     
-    sql = '''UPDATE lojas SET nome=?, endereco=?, numero=?, bairro=?, municipio=?, uf=?, telefone=?, vendedor=?'''
-    params = [f['nome'], f['endereco'], f['numero'], f['bairro'], f['municipio'], f['uf'], f['telefone'], f['vendedor']]
+    sql = '''UPDATE lojas SET codigo=?, nome=?, endereco=?, numero=?, bairro=?, municipio=?, uf=?, telefone=?, vendedor=?'''
+    params = [f['codigo'], f['nome'], f['endereco'], f['numero'], f['bairro'], f['municipio'], f['uf'], f['telefone'], f['vendedor']]
     
     if lat and lon:
         sql += ", lat=?, lon=?"
