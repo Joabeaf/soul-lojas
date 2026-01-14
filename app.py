@@ -17,7 +17,7 @@ if not os.path.exists(UPLOAD_FOLDER):
 
 DB_NAME = "lojas.db"
 
-# --- HTML PÚBLICO (BUSCA INTELIGENTE NO CLIENTE) ---
+# --- HTML PÚBLICO (CORRIGIDO) ---
 HTML_PUBLICO = """
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -115,12 +115,16 @@ HTML_PUBLICO = """
         var radiusCircle = null;
         var modalMap = null;
         var allData = [];
+
+        // CORREÇÃO AQUI: Ajuste na leitura dos dados
         async function carregar() {
             let res = await fetch('/api/lojas');
             let dados = await res.json();
-            allData = dados.lojas || []; 
+            // Verifica se veio direto a lista ou dentro de um objeto
+            allData = Array.isArray(dados) ? dados : (dados.lojas || []); 
             renderizar(allData);
         }
+
         function iniciarBusca() {
             let termo = document.getElementById('buscaInput').value.trim();
             if(!termo) { if(radiusCircle) mainMap.removeLayer(radiusCircle); document.getElementById('aviso').style.display = 'none'; renderizar(allData); return; }
@@ -246,7 +250,7 @@ HTML_PUBLICO = """
 </html>
 """
 
-# --- HTML ADMIN (ESTILO TREK + GPS NO CLIENTE) ---
+# --- HTML ADMIN (MANTIDO E FUNCIONAL) ---
 HTML_ADMIN = """
 <!DOCTYPE html>
 <html>
@@ -519,8 +523,6 @@ def delete_loja(id):
     conn.commit()
     conn.close()
     return redirect(url_for('admin', msg="Removido."))
-
-# Rota GPS removida pois agora é feita no FRONTEND
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
